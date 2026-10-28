@@ -1,0 +1,291 @@
+<div class="support-page">
+	<div class="page-header">
+		<div>
+			<h2 class="page-title">Support &amp; Diagnostics</h2>
+			<p class="page-subtitle">System health, dependency status, email verification testing, and redacted diagnostic bundle export.</p>
+		</div>
+	</div>
+
+	<!-- Dependency Readiness -->
+	<div class="card" id="readiness-card">
+		<div class="card-header">
+			<h3 class="card-title">Dependency Readiness</h3>
+			<button class="btn btn-secondary btn-sm" type="button" id="btn-refresh-readiness" onclick="fetchReadiness()">Check Now</button>
+		</div>
+		<div class="card-body-plain">
+			<div id="readiness-state" class="state-box">
+				<div class="state-box-title">Checking system readiness…</div>
+				<div class="state-box-help">Checking local server state and dependencies.</div>
+			</div>
+			<div id="readiness-content" style="display: none;">
+				<div id="readiness-items" class="readiness-list"></div>
+			</div>
+			<p class="data-source-note" id="readiness-note" style="margin-top: 12px; display: none;"></p>
+		</div>
+	</div>
+
+	<!-- Email Verification Test -->
+	<div class="card">
+		<div class="card-header">
+			<h3 class="card-title">Test Email Delivery</h3>
+		</div>
+		<div class="card-body-plain">
+			<p class="data-source-note">
+				Verify that your configured Gmail integration can deliver messages before event day.
+				This sends a single test message and reports the transport result without storing personal records.
+			</p>
+			<form id="email-test-form" onsubmit="submitEmailTest(event)" style="margin-top: 16px; max-width: 500px;">
+				<div class="form-group">
+					<label for="test-email-target" class="form-label">Recipient Email Address</label>
+					<input type="email" id="test-email-target" class="form-input" placeholder="organizer@example.com" required>
+				</div>
+				<div style="margin-top: 12px;">
+					<button type="submit" class="btn btn-primary" id="btn-send-email-test">Send Test Email</button>
+				</div>
+			</form>
+			<div id="email-test-result" style="display: none; margin-top: 16px;" class="state-box"></div>
+		</div>
+	</div>
+
+	<!-- Support Bundle Export -->
+	<div class="card">
+		<div class="card-header">
+			<h3 class="card-title">Diagnostic Support Bundle</h3>
+		</div>
+		<div class="card-body-plain">
+			<p class="data-source-note">
+				Download a JSON diagnostic summary containing system specifications and aggregate record counts.
+				This release does not export environment settings, migration history, or logs.
+				No Discord user tokens, passwords, or participant emails are exported.
+			</p>
+			<div style="margin-top: 16px;">
+				<button class="btn btn-secondary" type="button" id="btn-download-bundle" onclick="downloadSupportBundle()">
+					<span class="btn-icon">
+						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+					</span>
+					Download Redacted Support Bundle
+				</button>
+			</div>
+			<div id="bundle-feedback" style="display: none; margin-top: 12px;" class="data-source-note"></div>
+		</div>
+	</div>
+</div>
+
+<style>
+	.support-page { max-width: 900px; }
+	.page-header { margin-bottom: 24px; }
+	.support-page .card { margin-bottom: 24px; }
+	.card-body-plain { padding: 20px 24px; }
+	.form-group { display: flex; flex-direction: column; gap: 6px; }
+	.form-label { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+	.form-input {
+		padding: 8px 12px;
+		border-radius: var(--radius-sm);
+		border: 1px solid var(--border);
+		background: var(--bg-tertiary);
+		color: var(--text-primary);
+		font-size: 14px;
+	}
+	.form-input:focus { outline: none; border-color: var(--accent); }
+</style>
+
+<script>
+	function el(tag, attrs) {
+		const node = document.createElement(tag);
+		if (attrs) {
+			Object.keys(attrs).forEach(function (key) {
+				const value = attrs[key];
+				if (value === null || value === undefined || value === false) return;
+				if (key === 'class') node.className = value;
+				else if (key === 'text') node.textContent = value;
+				else node.setAttribute(key, String(value));
+			});
+		}
+		for (let i = 2; i < arguments.length; i++) {
+			const child = arguments[i];
+			if (child === null || child === undefined || child === false) continue;
+			node.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
+		}
+		return node;
+	}
+
+	async function fetchReadiness() {
+		const stateBox = document.getElementById('readiness-state');
+		const content = document.getElementById('readiness-content');
+		const list = document.getElementById('readiness-items');
+		const note = document.getElementById('readiness-note');
+		const btn = document.getElementById('btn-refresh-readiness');
+
+		btn.disabled = true;
+		stateBox.style.display = 'block';
+		stateBox.textContent = '';
+		stateBox.appendChild(el('div', { class: 'state-box-title', text: 'Checking system readiness…' }));
+		content.style.display = 'none';
+		note.style.display = 'none';
+
+		try {
+			// Probing GET /api/system/readiness first, then fallback to /api/health
+			let payload = null;
+			let isFallback = false;
+			try {
+				const res = await Dot.API.get('/api/system/readiness');
+				payload = res.data;
+			} catch (err) {
+				if (err.status === 404) {
+					isFallback = true;
+					const health = await Dot.API.get('/api/health');
+					payload = {
+						web: { ok: health.status === 'ok', message: 'HTTP server responding' },
+						database: { ok: null, message: 'Database readiness has not been checked' },
+						discord: { ok: null, message: 'Detailed readiness check not yet available' },
+						email: { ok: null, message: 'Detailed readiness check not yet available' },
+						challengermode: { ok: null, message: 'Detailed readiness check not yet available' }
+					};
+				} else {
+					throw err;
+				}
+			}
+
+			list.textContent = '';
+			const items = [
+				{ key: 'web', label: 'Web Server', data: payload.web },
+				{ key: 'database', label: 'Database Storage', data: payload.database },
+				{ key: 'discord', label: 'Discord Bot Connection', data: payload.discord },
+				{ key: 'email', label: 'Email Transport', data: payload.email },
+				{ key: 'challengermode', label: 'Challengermode Integration (Read-only)', data: payload.challengermode }
+			];
+
+			items.forEach(function (item) {
+				const info = item.data || {};
+				const ok = typeof info.ok === 'boolean' ? info.ok : (typeof info.ready === 'boolean' ? info.ready : (typeof info.configured === 'boolean' ? info.configured : null));
+				const statusText = ok === true ? 'Ready' : (ok === false ? 'Action Required' : 'Not Assessed');
+				const detail = info.detail || info.message || info.reason || (ok === true ? 'Operating normally' : 'Status unknown');
+				const stateAttr = ok === true ? 'ok' : (ok === false ? 'fail' : 'unknown');
+
+				list.appendChild(el('div', { class: 'readiness-item', 'data-state': stateAttr },
+					el('div', {},
+						el('div', { style: 'font-weight: 600; color: var(--text-primary);', text: item.label }),
+						el('div', { class: 'tz-alt', text: detail })
+					),
+					el('span', { class: 'readiness-status', text: statusText })
+				));
+			});
+
+			stateBox.style.display = 'none';
+			content.style.display = 'block';
+
+			if (isFallback) {
+				note.textContent = 'Basic health check active; granular service readiness endpoints (guide 24) are still landing in backend.';
+				note.style.display = 'block';
+			}
+		} catch (error) {
+			stateBox.textContent = '';
+			stateBox.appendChild(el('div', { class: 'state-box-title', text: 'Readiness check failed' }));
+			stateBox.appendChild(el('div', { class: 'state-box-help', text: error.message }));
+		} finally {
+			btn.disabled = false;
+		}
+	}
+
+	async function submitEmailTest(event) {
+		event.preventDefault();
+		const input = document.getElementById('test-email-target');
+		const btn = document.getElementById('btn-send-email-test');
+		const resultBox = document.getElementById('email-test-result');
+		const target = input.value.trim();
+		if (!target) return;
+
+		btn.disabled = true;
+		resultBox.style.display = 'none';
+
+		try {
+			const res = await Dot.API.post('/api/system/email/test', { to: target });
+			resultBox.textContent = '';
+			if (res.data && res.data.accepted) {
+				resultBox.appendChild(el('div', { class: 'state-box-title', style: 'color: var(--success);', text: 'Test Email Dispatched' }));
+				resultBox.appendChild(el('div', { class: 'state-box-help', text: 'Transport accepted message for ' + target + '. Check inbox / spam folder.' }));
+				Dot.Toast.success('Test email accepted for delivery.');
+			} else {
+				const reason = (res.data && res.data.reason) || 'Unknown response';
+				const detail = (res.data && res.data.detail) || '';
+				resultBox.appendChild(el('div', { class: 'state-box-title', style: 'color: var(--danger);', text: 'Delivery Test Reported Issue' }));
+				resultBox.appendChild(el('div', { class: 'state-box-help', text: reason + (detail ? ': ' + detail : '') }));
+				Dot.Toast.warning('Email test reported: ' + reason);
+			}
+			resultBox.style.display = 'block';
+		} catch (error) {
+			resultBox.textContent = '';
+			if (error.status === 404) {
+				resultBox.appendChild(el('div', { class: 'state-box-title', text: 'Endpoint Not Yet Available' }));
+				resultBox.appendChild(el('div', { class: 'state-box-help', text: 'The backend test email endpoint (guide 2) is scheduled to land in the next backend wave.' }));
+			} else {
+				resultBox.appendChild(el('div', { class: 'state-box-title', style: 'color: var(--danger);', text: 'Email Test Failed' }));
+				resultBox.appendChild(el('div', { class: 'state-box-help', text: error.message }));
+			}
+			resultBox.style.display = 'block';
+			Dot.Toast.error(error.message);
+		} finally {
+			btn.disabled = false;
+		}
+	}
+
+	async function downloadSupportBundle() {
+		const feedback = document.getElementById('bundle-feedback');
+		feedback.style.display = 'none';
+
+		try {
+			const res = await Dot.API.get('/api/system/support-bundle');
+			const bundle = res.data || res;
+			const jsonStr = JSON.stringify(bundle, null, 2);
+			const blob = new Blob([jsonStr], { type: 'application/json' });
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = 'dot-support-bundle-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
+			document.body.appendChild(a);
+			a.click();
+			document.body.removeChild(a);
+			URL.revokeObjectURL(url);
+			Dot.Toast.success('Support bundle downloaded.');
+		} catch (error) {
+			if (error.status === 404) {
+				// Fallback: Generate client-assembled redacted diagnostic report
+				try {
+					const statsRes = await Dot.API.get('/api/system/stats');
+					const fallbackBundle = {
+						diagnosticVersion: '1.0-client-fallback',
+						generatedAt: new Date().toISOString(),
+						system: statsRes.data ? statsRes.data.system : null,
+						counts: statsRes.data ? {
+							tournaments: statsRes.data.tournaments,
+							players: statsRes.data.players,
+							schedules: statsRes.data.schedules,
+							discordGuilds: statsRes.data.discordGuilds
+						} : null,
+						notes: 'Backend support-bundle endpoint not yet landed; bundle generated from available system stats with all tokens excluded.'
+					};
+					const blob = new Blob([JSON.stringify(fallbackBundle, null, 2)], { type: 'application/json' });
+					const url = URL.createObjectURL(blob);
+					const a = document.createElement('a');
+					a.href = url;
+					a.download = 'dot-support-bundle-fallback-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
+					document.body.appendChild(a);
+					a.click();
+					document.body.removeChild(a);
+					URL.revokeObjectURL(url);
+					Dot.Toast.info('Downloaded available diagnostic telemetry (full bundle pending backend release).');
+				} catch (subErr) {
+					feedback.textContent = 'Could not generate bundle: ' + subErr.message;
+					feedback.style.display = 'block';
+					Dot.Toast.error('Could not download diagnostic bundle.');
+				}
+			} else {
+				feedback.textContent = 'Download failed: ' + error.message;
+				feedback.style.display = 'block';
+				Dot.Toast.error(error.message);
+			}
+		}
+	}
+
+	fetchReadiness();
+</script>

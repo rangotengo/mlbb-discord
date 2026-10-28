@@ -1,5 +1,6 @@
 appId: com.mlbb.tournament-bot
 productName: MLBB Tournament Bot
+executableName: mlbb-tournament-bot
 directories:
   output: dist/installers
   buildResources: assets
@@ -8,7 +9,9 @@ files:
   - dist/**/*
   - "!dist/installers/**"
   - ui/**/*
-  - data/**/*
+# Do not publish or sign from this file. Signing credentials are not configured.
+publish: null
+forceCodeSigning: false
 extraResources:
   - from: node_modules/call-bind-apply-helpers
     to: node_modules/call-bind-apply-helpers
@@ -22,6 +25,21 @@ asar: false
 win:
   target: nsis
   icon: assets/icon.ico
+  # No certificate is configured. electron-builder must not claim a signed executable.
+  signAndEditExecutable: false
+  verifyUpdateCodeSignature: false
 mac:
   target: dmg
   icon: assets/icon.icns
+  # null skips codesign. Hardened runtime and notarisation need a Developer ID, which is not available here.
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  artifactName: ${productName}-Setup-${version}.${ext}
+dmg:
+  artifactName: ${productName}-${version}.${ext}

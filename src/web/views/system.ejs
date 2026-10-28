@@ -1,7 +1,33 @@
 <div class="system-page">
 	<div class="page-header">
-		<h2 class="page-title">System Status</h2>
-		<span class="badge badge-success" id="node-version">Loading...</span>
+		<div>
+			<h2 class="page-title">System Overview</h2>
+			<p class="page-subtitle">What needs action now. Technical diagnostics are on <a href="/support">Support &amp; Diagnostics</a>.</p>
+		</div>
+		<span class="badge badge-secondary" id="node-version">Loading…</span>
+	</div>
+
+	<!-- Actionable overview (guide 18) -->
+	<div class="card overview-card">
+		<div class="card-header">
+			<h3 class="card-title">Needs attention</h3>
+			<button class="btn btn-secondary btn-sm" type="button" onclick="loadOverview()" id="overview-refresh">Refresh</button>
+		</div>
+		<div id="overview-state" class="state-box">
+			<div class="state-box-title">Loading overview…</div>
+		</div>
+		<div id="overview-content" style="display: none;">
+			<div class="overview-grid" id="overview-counters"></div>
+			<div class="overview-section">
+				<h4 class="overview-heading">Upcoming matches</h4>
+				<div class="table-container" id="upcoming-container"></div>
+			</div>
+			<div class="overview-section" id="stale-section" style="display: none;">
+				<h4 class="overview-heading">Stale tournament data</h4>
+				<p class="data-source-note">These tournaments were synced from Challengermode but the last sync attempt did not succeed. Match data may be out of date.</p>
+				<div id="stale-list" class="readiness-list"></div>
+			</div>
+		</div>
 	</div>
 
 	<div class="system-grid">
@@ -61,31 +87,39 @@
 				<h3 class="card-title">Recent Activity</h3>
 			</div>
 			<div id="activity-list" class="activity-list">
-				<p class="text-secondary">Loading activity...</p>
+				<p class="text-secondary">Loading activity…</p>
 			</div>
-		</div>
-
-		<!-- Logs -->
-		<div class="card system-logs-card">
-			<div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-				<h3 class="card-title">System Logs</h3>
-				<button class="btn btn-secondary btn-sm" onclick="fetchLogs()">Refresh Logs</button>
-			</div>
-			<div id="logs-container" class="logs-container">
-				<div class="logs-loading">Loading logs...</div>
-			</div>
+			<p class="data-source-note" id="activity-note" style="display: none;"></p>
 		</div>
 	</div>
 </div>
 
 <style>
 	.system-page { max-width: 1200px; }
-	
+
 	.page-header {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
 		margin-bottom: 2rem;
+		gap: 1rem;
+	}
+
+	.overview-card { margin-bottom: 1.5rem; }
+
+	.overview-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+		gap: 1rem;
+	}
+
+	.overview-section { margin-top: 1.5rem; }
+
+	.overview-heading {
+		font-size: 15px;
+		font-weight: 600;
+		color: var(--text-primary);
+		margin-bottom: 12px;
 	}
 
 	.system-grid {
@@ -94,7 +128,7 @@
 		gap: 1.5rem;
 	}
 
-	.system-activity-card, .system-logs-card { grid-column: span 2; }
+	.system-activity-card { grid-column: span 2; }
 
 	.stats-grid {
 		display: grid;
@@ -108,9 +142,9 @@
 		border-radius: var(--radius-md);
 		border: 1px solid var(--border);
 		text-align: center;
-		transition: transform var(--transition-short);
+		transition: transform var(--ease-fast);
 	}
-	
+
 	.stat-item:hover {
 		transform: translateY(-2px);
 		border-color: var(--accent);
@@ -165,164 +199,403 @@
 		border-left: 3px solid var(--accent);
 	}
 
-	.logs-container {
-		background: #0d0e12;
-		color: #e2e4e9;
-		font-family: var(--font-mono);
-		padding: 1.25rem;
-		border-radius: var(--radius-md);
-		border: 1px solid var(--border-medium);
-		max-height: 500px;
-		overflow-y: auto;
-		font-size: 0.825rem;
-		line-height: 1.6;
-		box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);
-	}
-
-	.log-line {
-		margin-bottom: 0.15rem;
-		padding: 0.15rem 0.5rem;
-		border-radius: 4px;
-		display: flex;
-		gap: 0.75rem;
-		transition: background 0.1s;
-	}
-	
-	.log-line:hover {
-		background: rgba(255,255,255,0.03);
-	}
-
-	.log-time { color: #6e7681; font-weight: 500; min-width: 85px; }
-	.log-ns { font-weight: 600; min-width: 120px; text-transform: lowercase; opacity: 0.9; }
-	.log-msg { color: #f0f6fc; flex: 1; word-break: break-all; }
-
-	/* Log Levels */
-	.log-line[data-level="error"] { background: rgba(248, 113, 113, 0.05); }
-	.log-line[data-level="error"] .log-ns { color: #f87171; }
-	
-	.log-line[data-level="warn"] { background: rgba(251, 191, 36, 0.05); }
-	.log-line[data-level="warn"] .log-ns { color: #fbbf24; }
-	
-	.log-line[data-level="notify"] { color: #818cf8; }
-	.log-line[data-level="notify"] .log-ns { color: #818cf8; }
-
-	.log-line[data-level="info"] .log-ns { color: #34d399; }
-	.log-line[data-level="verbose"] .log-ns { color: #94a3b8; }
-
-	.logs-loading { text-align: center; padding: 3rem; color: var(--text-tertiary); font-style: italic; }
-
 	@media (max-width: 768px) {
 		.system-grid { grid-template-columns: 1fr; }
-		.system-activity-card, .system-logs-card { grid-column: span 1; }
+		.system-activity-card { grid-column: span 1; }
 	}
 </style>
 
 <script>
+	const el = function (tag, attrs) {
+		const node = document.createElement(tag);
+		if (attrs) {
+			Object.keys(attrs).forEach(function (key) {
+				const value = attrs[key];
+				if (value === null || value === undefined || value === false) return;
+				if (key === 'class') node.className = value;
+				else if (key === 'text') node.textContent = value;
+				else node.setAttribute(key, value === true ? '' : String(value));
+			});
+		}
+		for (let i = 2; i < arguments.length; i++) {
+			const child = arguments[i];
+			if (child === null || child === undefined || child === false) continue;
+			node.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
+		}
+		return node;
+	};
+
 	function formatUptime(seconds) {
-		const d = Math.floor(seconds / (3600*24));
-		const h = Math.floor(seconds % (3600*24) / 3600);
+		const d = Math.floor(seconds / (3600 * 24));
+		const h = Math.floor(seconds % (3600 * 24) / 3600);
 		const m = Math.floor(seconds % 3600 / 60);
 		const s = Math.floor(seconds % 60);
-		
+
 		const parts = [];
-		if (d > 0) parts.push(`${d}d`);
-		if (h > 0) parts.push(`${h}h`);
-		if (m > 0) parts.push(`${m}m`);
-		parts.push(`${s}s`);
+		if (d > 0) parts.push(d + 'd');
+		if (h > 0) parts.push(h + 'h');
+		if (m > 0) parts.push(m + 'm');
+		parts.push(s + 's');
 		return parts.join(' ');
 	}
 
 	function formatBytes(bytes) {
-		if (bytes === 0) return '0 B';
+		if (!bytes) return '0 B';
 		const k = 1024;
 		const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
 		const i = Math.floor(Math.log(bytes) / Math.log(k));
 		return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 	}
 
+	function formatTime(value) {
+		if (!value) return '—';
+		const d = new Date(value);
+		if (isNaN(d.getTime())) return '—';
+		if (d.getFullYear() > 2090) return 'Not set';
+		return d.toLocaleString(undefined, {
+			weekday: 'short', day: 'numeric', month: 'short',
+			hour: '2-digit', minute: '2-digit'
+		});
+	}
+
+	// ── Actionable overview (guide 18) ─────────────────────────────────────
+	// Preferred source: GET /api/system/overview (agreed contract).
+	// Fallback: derive a reduced overview client-side from /api/tournaments and
+	// each tournament's schedule list, clearly labelled as partial. The fallback
+	// cannot see unresolved verifications per server, missing roles, failed jobs
+	// or stale syncs, so those counters render as "unknown" rather than zero.
+
+	async function loadOverview() {
+		const stateBox = document.getElementById('overview-state');
+		const content = document.getElementById('overview-content');
+		const refresh = document.getElementById('overview-refresh');
+		refresh.disabled = true;
+
+		stateBox.style.display = 'block';
+		stateBox.textContent = '';
+		stateBox.appendChild(el('div', { class: 'state-box-title', text: 'Loading overview…' }));
+		content.style.display = 'none';
+
+		let payload = null;
+		let degraded = false;
+		try {
+			const response = await Dot.API.get('/api/system/overview');
+			payload = response.data;
+		} catch (error) {
+			if (error.status === 404) {
+				degraded = true;
+			} else {
+				stateBox.textContent = '';
+				stateBox.appendChild(el('div', { class: 'state-box-title', text: 'Could not load the overview' }));
+				stateBox.appendChild(el('div', { class: 'state-box-help', text: error.message }));
+				stateBox.appendChild(el('a', { class: 'btn btn-secondary btn-sm', href: '#', onclick: 'loadOverview();return false;', text: 'Try again' }));
+				refresh.disabled = false;
+				return;
+			}
+		}
+
+		let data = payload;
+		if (degraded) {
+			try {
+				data = await buildFallbackOverview();
+			} catch (error) {
+				stateBox.textContent = '';
+				stateBox.appendChild(el('div', { class: 'state-box-title', text: 'Could not load the overview' }));
+				stateBox.appendChild(el('div', { class: 'state-box-help', text: error.message }));
+				refresh.disabled = false;
+				return;
+			}
+		}
+
+		renderOverview(data, degraded);
+		refresh.disabled = false;
+	}
+
+	async function buildFallbackOverview() {
+		const tournamentsResponse = await Dot.API.get('/api/tournaments');
+		const tournaments = tournamentsResponse.data || [];
+
+		let upcoming = [];
+		let unscheduled = 0;
+		let unresolved = 0;
+		let unverifiedTotal = 0;
+
+		// Sequential to avoid hammering the API with a burst of requests.
+		for (const t of tournaments) {
+			try {
+				const schedulesResponse = await Dot.API.get('/api/tournaments/' + encodeURIComponent(t.id) + '/schedules');
+				const schedules = schedulesResponse.data || [];
+				const now = Date.now();
+				schedules.forEach(function (s) {
+					const time = s.scheduledTime ? new Date(s.scheduledTime) : null;
+					const unscheduledSentinel = !time || isNaN(time.getTime()) || time.getFullYear() > 2090;
+					if (unscheduledSentinel) {
+						unscheduled++;
+						return;
+					}
+					if (time.getTime() >= now && upcoming.length < 100) {
+						upcoming.push({
+							matchId: s.matchId,
+							tournamentId: t.id,
+							tournamentName: t.name,
+							scheduledTime: s.scheduledTime,
+							round: s.round,
+							player1Name: s.player1Name,
+							player2Name: s.player2Name,
+							threadId: s.threadId || null
+						});
+					}
+				});
+			} catch (error) {
+				// A single unreadable tournament should not blank the whole overview.
+				console.error('Overview fallback: failed to load schedules for ' + t.id, error);
+			}
+			if (t.unverifiedCount) {
+				unverifiedTotal += t.unverifiedCount;
+			}
+			// "Teams awaiting verification" is the closest available proxy for
+			// unresolved verifications without the backend counter.
+			unresolved = unverifiedTotal;
+		}
+
+		upcoming.sort(function (a, b) { return new Date(a.scheduledTime) - new Date(b.scheduledTime); });
+
+		return {
+			upcomingMatches: upcoming,
+			unresolvedVerifications: unresolved,
+			unknownVerifications: true,
+			missingRoles: null,
+			unmatchedTeams: null,
+			unscheduledMatches: unscheduled,
+			failedJobs: null,
+			staleSyncs: [],
+			generatedAt: new Date().toISOString(),
+			partial: true
+		};
+	}
+
+	function renderOverview(data, degraded) {
+		const stateBox = document.getElementById('overview-state');
+		const content = document.getElementById('overview-content');
+		stateBox.style.display = 'none';
+		content.style.display = 'block';
+
+		if (degraded && data.partial) {
+			const header = document.getElementById('overview-refresh').parentNode;
+			if (!header.querySelector('.data-source-note')) {
+				header.appendChild(el('p', {
+					class: 'data-source-note',
+					text: 'Partial data: the full overview endpoint is not available yet, so some counters are unknown. Match data comes from each tournament\u2019s schedule list.'
+				}));
+			}
+		}
+
+		const counters = document.getElementById('overview-counters');
+		counters.textContent = '';
+
+		const unverified = data.unresolvedVerifications;
+		counters.appendChild(counterLink({
+			value: unverified === null || unverified === undefined ? '?' : unverified,
+			label: 'Awaiting verification',
+			state: !unverified ? 'ok' : unverified > 0 ? 'warn' : 'ok',
+			href: '/players?verified=false',
+			unknown: unverified === null || unverified === undefined || data.unknownVerifications
+		}));
+
+		counters.appendChild(counterLink({
+			value: data.unscheduledMatches === null || data.unscheduledMatches === undefined ? '?' : data.unscheduledMatches,
+			label: 'Matches without a time',
+			state: data.unscheduledMatches > 0 ? 'warn' : 'ok',
+			href: '/tournaments',
+			unknown: data.unscheduledMatches === null || data.unscheduledMatches === undefined
+		}));
+
+		counters.appendChild(counterLink({
+			value: data.missingRoles === null || data.missingRoles === undefined ? '?' : data.missingRoles,
+			label: 'Missing Discord roles',
+			state: data.missingRoles > 0 ? 'alert' : 'ok',
+			href: '/support#readiness',
+			unknown: data.missingRoles === null || data.missingRoles === undefined
+		}));
+
+		counters.appendChild(counterLink({
+			value: data.unmatchedTeams === null || data.unmatchedTeams === undefined ? '?' : data.unmatchedTeams,
+			label: 'Unmatched teams',
+			state: data.unmatchedTeams > 0 ? 'warn' : 'ok',
+			href: '/tournaments',
+			unknown: data.unmatchedTeams === null || data.unmatchedTeams === undefined
+		}));
+
+		counters.appendChild(counterLink({
+			value: data.failedJobs === null || data.failedJobs === undefined ? '?' : data.failedJobs,
+			label: 'Failed jobs',
+			state: data.failedJobs > 0 ? 'alert' : 'ok',
+			href: '/support',
+			unknown: data.failedJobs === null || data.failedJobs === undefined
+		}));
+
+		const stale = data.staleSyncs || [];
+		counters.appendChild(counterLink({
+			value: stale.length,
+			label: 'Stale syncs',
+			state: stale.length > 0 ? 'warn' : 'ok',
+			href: '#stale-section'
+		}));
+
+		// Upcoming matches
+		const container = document.getElementById('upcoming-container');
+		container.textContent = '';
+		const upcoming = (data.upcomingMatches || []).slice(0, 10);
+		if (upcoming.length === 0) {
+			container.appendChild(el('div', { class: 'state-box' },
+				el('div', { class: 'state-box-title', text: 'No upcoming matches' }),
+				el('div', { class: 'state-box-help', text: 'Once schedules have times set, the next matches appear here.' })
+			));
+		} else {
+			const table = el('table', { class: 'table table-sm' });
+			const thead = el('thead');
+			const headRow = el('tr');
+			['When', 'Tournament', 'Match', 'Thread'].forEach(function (label) {
+				headRow.appendChild(el('th', { text: label }));
+			});
+			thead.appendChild(headRow);
+			table.appendChild(thead);
+
+			const tbody = el('tbody');
+			upcoming.forEach(function (m) {
+				const whenCell = el('td');
+				whenCell.appendChild(el('div', { text: formatTime(m.scheduledTime) }));
+				whenCell.appendChild(el('div', { class: 'tz-alt', text: 'Round ' + (m.round || '?') }));
+
+				const tournamentCell = el('td');
+				if (m.tournamentId) {
+					tournamentCell.appendChild(el('a', { href: '/tournaments/' + encodeURIComponent(m.tournamentId), text: m.tournamentName || m.tournamentId }));
+				} else {
+					tournamentCell.textContent = m.tournamentName || '—';
+				}
+
+				const matchCell = el('td');
+				matchCell.appendChild(el('div', { text: (m.player1Name || 'TBD') + ' vs ' + (m.player2Name || 'TBD') }));
+				matchCell.appendChild(el('div', { class: 'tz-alt', text: m.matchId }));
+
+				const threadCell = el('td');
+				if (m.threadId && m.guildId) {
+					threadCell.appendChild(el('a', {
+						href: 'https://discord.com/channels/' + m.guildId + '/' + m.threadId,
+						target: '_blank', rel: 'noopener noreferrer',
+						text: 'Open thread'
+					}));
+				} else {
+					threadCell.appendChild(el('span', { class: 'text-secondary', text: '—' }));
+				}
+
+				tbody.appendChild(el('tr', {}, whenCell, tournamentCell, matchCell, threadCell));
+			});
+			table.appendChild(tbody);
+			container.appendChild(table);
+		}
+
+		// Stale syncs
+		const staleSection = document.getElementById('stale-section');
+		const staleList = document.getElementById('stale-list');
+		staleList.textContent = '';
+		if (stale.length > 0) {
+			staleSection.style.display = 'block';
+			stale.forEach(function (entry) {
+				staleList.appendChild(el('div', { class: 'readiness-item', 'data-state': 'warn' },
+					el('a', { href: '/tournaments/' + encodeURIComponent(entry.tournamentId), text: entry.name || entry.tournamentId }),
+					el('span', { class: 'readiness-status', text: 'Last sync attempt ' + Dot.Utils.formatRelativeTime(entry.lastSyncAttempt) })
+				));
+			});
+		} else {
+			staleSection.style.display = 'none';
+		}
+	}
+
+	function counterLink(options) {
+		const value = options.unknown ? 'Unknown' : String(options.value);
+		return el('a', {
+			class: 'overview-counter',
+			'data-state': options.unknown ? 'unknown' : options.state,
+			href: options.href || '/tournaments'
+		},
+			el('span', { class: 'overview-counter-value', text: value }),
+			el('span', { class: 'overview-counter-label', text: options.label })
+		);
+	}
+
 	async function fetchStats() {
 		try {
-			const res = await fetch('/api/system/stats');
-			const data = await res.json();
-
-			if (data.success) {
-				const s = data.data;
+			const res = await Dot.API.get('/api/system/stats');
+			if (res.success) {
+				const s = res.data;
 				document.getElementById('stat-tournaments').textContent = s.tournaments;
 				document.getElementById('stat-players').textContent = s.players;
 				document.getElementById('stat-schedules').textContent = s.schedules;
 				document.getElementById('stat-guilds').textContent = s.discordGuilds;
-				
-				// System info
+
 				document.getElementById('node-version').textContent = s.system.nodeVersion;
-				document.getElementById('sys-platform').textContent = `${s.system.platform} (${s.system.arch})`;
+				document.getElementById('sys-platform').textContent = s.system.platform + ' (' + s.system.arch + ')';
 				document.getElementById('sys-uptime').textContent = formatUptime(s.system.uptime);
-				document.getElementById('sys-memory').textContent = `${formatBytes(s.system.memory.usage)} / ${formatBytes(s.system.memory.total)}`;
+				document.getElementById('sys-memory').textContent = formatBytes(s.system.memory.usage) + ' / ' + formatBytes(s.system.memory.total);
 				document.getElementById('sys-cpus').textContent = s.system.cpus;
 			}
 		} catch (error) {
 			console.error('Failed to fetch stats:', error);
+			const nodeVersion = document.getElementById('node-version');
+			if (nodeVersion) nodeVersion.textContent = 'unavailable';
 		}
 	}
 
 	async function fetchActivity() {
+		const list = document.getElementById('activity-list');
+		const note = document.getElementById('activity-note');
 		try {
-			const res = await fetch('/api/system/activity?limit=6');
-			const data = await res.json();
-			const list = document.getElementById('activity-list');
-
-			if (data.success && data.data.length > 0) {
-				list.innerHTML = data.data.map(item => `
-					<div class="activity-item">
-						<span>${item.message}</span>
-					</div>
-				`).join('');
+			const res = await Dot.API.get('/api/system/activity?limit=6');
+			list.textContent = '';
+			const items = (res.data || []);
+			if (items.length > 0) {
+				items.forEach(function (item) {
+					const row = el('div', { class: 'activity-item' });
+					if (item.timestamp && !isPlaceholderTimestamp(item.timestamp)) {
+						row.appendChild(el('div', { class: 'tz-alt', text: Dot.Utils.formatRelativeTime(item.timestamp) }));
+					}
+					row.appendChild(el('span', { text: item.message || item.action || '' }));
+					list.appendChild(row);
+				});
+				note.style.display = 'none';
 			} else {
-				list.innerHTML = '<p class="text-secondary">No recent activity</p>';
+				list.appendChild(el('p', { class: 'text-secondary', text: 'No recent activity' }));
+				note.style.display = 'none';
 			}
 		} catch (error) {
 			console.error('Failed to fetch activity:', error);
+			list.textContent = '';
+			list.appendChild(el('p', { class: 'text-secondary', text: 'Activity is unavailable right now.' }));
+			note.textContent = 'A persisted audit trail (guide 22) has not landed yet; activity history is unavailable rather than guessed.';
+			note.style.display = 'block';
 		}
 	}
 
-	async function fetchLogs() {
-		try {
-			const container = document.getElementById('logs-container');
-			const res = await fetch('/api/system/logs');
-			const data = await res.json();
-
-			if (data.success && data.data.length > 0) {
-				container.innerHTML = data.data.map(log => {
-					const time = new Date(log.timestamp).toLocaleTimeString([], { hour12: false });
-					const level = log.namespace.split(':')[0]; // get error/warn/etc
-					return `
-						<div class="log-line" data-level="${level}">
-							<span class="log-time">${time}</span>
-							<span class="log-ns">${log.namespace}</span>
-							<span class="log-msg">${escapeHtml(log.message)}</span>
-						</div>
-					`;
-				}).join('');
-				// Scroll to bottom
-				container.scrollTop = container.scrollHeight;
-			} else {
-				container.innerHTML = '<div class="logs-loading">No logs available</div>';
-			}
-		} catch (error) {
-			console.error('Failed to fetch logs:', error);
-		}
-	}
-
-	function escapeHtml(text) {
-		const div = document.createElement('div');
-		div.textContent = text;
-		return div.innerHTML;
+	// The current backend derives activity from tournaments with a placeholder
+	// "now" timestamp (guide 22 evidence). Rendering a fabricated time would be
+	// misleading, so relative times are only shown once the backend sends real
+	// audit records. Detection: placeholder entries all carry timestamps within
+	// a few seconds of the request, and there is no actor/action differentiation.
+	function isPlaceholderTimestamp(value) {
+		const date = new Date(value);
+		if (isNaN(date.getTime())) return true;
+		// An audit record written "just now" is possible, but the known placeholder
+		// shape always equals request time to the millisecond, which real records
+		// essentially never do across several entries.
+		return Date.now() - date.getTime() < 3000;
 	}
 
 	// Initial load
+	loadOverview();
 	fetchStats();
 	fetchActivity();
-	fetchLogs();
 
 	// Auto refresh basic stats every 30s
-	setInterval(fetchStats, 30000);
+	window.setInterval(fetchStats, 30000);
 </script>

@@ -37,15 +37,15 @@ jobs:
       - name: Build Electron UI
         run: npm run electron:build
 
+      - name: Desktop setup and lifecycle checks
+        run: node --require ./test/helpers/setup.cjs --test test/desktop-improvements.test.cjs
+
       - name: Build macOS app
         run: npm run build:mac
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Optional: Google OAuth credentials for email functionality
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
-          GOOGLE_TOKEN_URI: ${{ secrets.GOOGLE_TOKEN_URI }}
+          # No Apple signing identity or notary credentials. identity is null in electron-builder.yml.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

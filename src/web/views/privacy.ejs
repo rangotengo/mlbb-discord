@@ -1,0 +1,183 @@
+<div class="privacy-page">
+	<div class="page-header">
+		<div>
+			<h2 class="page-title">Privacy &amp; Retention</h2>
+			<p class="page-subtitle">What this system stores about participants, for how long, and the actions available to remove it.</p>
+		</div>
+	</div>
+
+	<div class="card">
+		<div class="card-header">
+			<h3 class="card-title">What is collected</h3>
+		</div>
+		<div class="card-body-plain">
+			<table class="table table-sm">
+				<thead>
+					<tr>
+						<th scope="col">Data</th>
+						<th scope="col">Why it is stored</th>
+						<th scope="col">Where it appears</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td>Email address</td>
+						<td>Sending one-time verification codes during check-in</td>
+						<td>Player search, tournament participants, CSV export</td>
+					</tr>
+					<tr>
+						<td>Captain name</td>
+						<td>Matching enrolments to participants</td>
+						<td>Player search, tournament participants</td>
+					</tr>
+					<tr>
+						<td>Team name</td>
+						<td>Linking players to matches and threads</td>
+						<td>Everywhere team names are shown</td>
+					</tr>
+					<tr>
+						<td>Discord username / user ID</td>
+						<td>Granting the participant role and adding players to match threads</td>
+						<td>Player search, tournament participants</td>
+					</tr>
+					<tr>
+						<td>Verification state</td>
+						<td>Knowing who has completed check-in</td>
+						<td>Everywhere verification badges are shown</td>
+					</tr>
+				</tbody>
+			</table>
+			<p class="data-source-note">
+				Verification codes themselves are not shown anywhere in this dashboard. If a code delivery
+				fails, the participant is told delivery failed — the code is never displayed to staff.
+			</p>
+		</div>
+	</div>
+
+	<div class="card">
+		<div class="card-header">
+			<h3 class="card-title">Retention</h3>
+		</div>
+		<div class="card-body-plain">
+			<div id="retention-state" class="state-box">
+				<div class="state-box-title">Checking what the backend supports…</div>
+				<div class="state-box-help">Probing the retention endpoints.</div>
+			</div>
+			<div id="retention-content" style="display: none;">
+				<div id="retention-rules" class="readiness-list"></div>
+				<div class="retention-actions">
+					<button class="btn btn-secondary" type="button" id="btn-preview-retention">Preview what would be removed</button>
+					<button class="btn btn-danger" type="button" id="btn-run-retention">Run retention now</button>
+				</div>
+				<div id="retention-result" class="retention-result" style="display: none;" role="status"></div>
+			</div>
+		</div>
+	</div>
+
+	<div class="card">
+		<div class="card-header">
+			<h3 class="card-title">Participant deletion &amp; export</h3>
+		</div>
+		<div class="card-body-plain">
+			<p class="data-source-note">Automated retention, participant privacy export, and audited deletion are not available in this release. Contact the organiser to arrange data access or removal. Existing backups must be handled separately.</p>
+		</div>
+	</div>
+</div>
+
+<style>
+	.privacy-page { max-width: 900px; }
+	.page-header { margin-bottom: 24px; }
+	.privacy-page .card { margin-bottom: 24px; }
+	.card-body-plain { padding: 20px 24px; }
+	.retention-actions { display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+	.retention-result {
+		margin-top: 16px;
+		padding: 14px 16px;
+		border-radius: var(--radius-md);
+		background: var(--bg-tertiary);
+		border: 1px solid var(--border);
+		font-size: 13.5px;
+		line-height: 1.55;
+		white-space: pre-wrap;
+	}
+</style>
+
+<script>
+	(function () {
+		const stateBox = document.getElementById('retention-state');
+		const content = document.getElementById('retention-content');
+
+		function el(tag, attrs) {
+			const node = document.createElement(tag);
+			if (attrs) {
+				Object.keys(attrs).forEach(function (key) {
+					const value = attrs[key];
+					if (value === null || value === undefined || value === false) return;
+					if (key === 'class') node.className = value;
+					else if (key === 'text') node.textContent = value;
+					else node.setAttribute(key, String(value));
+				});
+			}
+			for (let i = 2; i < arguments.length; i++) {
+				const child = arguments[i];
+				if (child === null || child === undefined || child === false) continue;
+				node.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
+			}
+			return node;
+		}
+
+		function unavailable(message) {
+			stateBox.textContent = '';
+			stateBox.appendChild(el('div', { class: 'state-box-title', text: 'Retention controls are not available yet' }));
+			stateBox.appendChild(el('div', { class: 'state-box-help', text: message }));
+		}
+
+		async function init() {
+			try {
+				const response = await Dot.API.get('/api/system/retention/rules');
+				const rules = response.data;
+				stateBox.style.display = 'none';
+				content.style.display = 'block';
+				const list = document.getElementById('retention-rules');
+				list.textContent = '';
+				(rules || []).forEach(function (rule) {
+					list.appendChild(el('div', { class: 'readiness-item', 'data-state': 'unknown' },
+						el('span', { text: (rule.category || rule.name) + (rule.retentionDays ? ' — kept for ' + rule.retentionDays + ' days' : '') }),
+						el('span', { class: 'readiness-status', text: rule.description || '' })
+					));
+				});
+			} catch (error) {
+				if (error.status === 404) {
+					unavailable('The backend retention endpoints (guide 23) have not been implemented yet, so there is nothing truthful to run or preview. This page will become active once they land.');
+				} else {
+					unavailable('Retention status could not be loaded: ' + error.message);
+				}
+			}
+		}
+
+		async function runRetention(preview) {
+			const resultBox = document.getElementById('retention-result');
+			resultBox.style.display = 'none';
+			try {
+				const response = await Dot.API.post('/api/system/retention/run', { preview: !!preview });
+				const data = response.data || {};
+				resultBox.textContent = JSON.stringify(data, null, 2);
+				resultBox.style.display = 'block';
+				Dot.Toast.success(preview ? 'Preview complete — nothing was removed.' : 'Retention run complete.');
+			} catch (error) {
+				Dot.Toast.error('Retention ' + (preview ? 'preview' : 'run') + ' failed: ' + error.message);
+			}
+		}
+
+		document.getElementById('btn-preview-retention').addEventListener('click', function () { runRetention(true); });
+		document.getElementById('btn-run-retention').addEventListener('click', function () {
+			Dot.Modal.confirm(
+				'Run retention now',
+				'This removes eligible private data such as expired verification challenges. Non-personal tournament summaries are kept. Continue?',
+				function () { runRetention(false); }
+			);
+		});
+
+		init();
+	})();
+</script>

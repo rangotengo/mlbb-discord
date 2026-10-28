@@ -22,6 +22,7 @@
 					<th>Tournament ID</th>
 					<th>Tournament Name</th>
 					<th>Status</th>
+					<th>Sync Freshness</th>
 					<th>Format</th>
 					<th>Verified Teams</th>
 					<th>Unverified Teams</th>
@@ -30,7 +31,7 @@
 			</thead>
 			<tbody id="tournaments-body">
 				<tr>
-					<td colspan="7" class="loading-row">
+					<td colspan="8" class="loading-row">
 						<div class="spinner"></div> Loading tournaments...
 					</td>
 				</tr>
@@ -49,9 +50,9 @@
 		</div>
 		<div class="modal-body">
 			<div class="form-group">
-				<label class="form-label">Challonge URL</label>
-				<input type="url" class="form-input" id="create-url" placeholder="https://challonge.com/xyz" required>
-				<div class="form-help">Enter the Challonge tournament URL</div>
+				<label class="form-label">Challengermode URL</label>
+				<input type="url" class="form-input" id="create-url" placeholder="https://www.challengermode.com/s/your-space/tournaments/UUID" required>
+				<div class="form-help">Enter the Challengermode tournament URL</div>
 			</div>
 			<div class="form-group">
 				<label class="form-label">Tournament Name</label>
@@ -238,7 +239,7 @@ function renderTournaments() {
 	if (filtered.length === 0) {
 		tbody.innerHTML = `
 			<tr>
-				<td colspan="7" class="empty-state">
+				<td colspan="8" class="empty-state">
 					<div class="empty-state-text">No tournaments found</div>
 					<div class="empty-state-help">Create a new tournament to get started</div>
 				</td>
@@ -247,7 +248,19 @@ function renderTournaments() {
 		return;
 	}
 
-	tbody.innerHTML = filtered.map(t => `
+	tbody.innerHTML = filtered.map(t => {
+		let syncBadge = '<span class="sync-badge sync-badge-never">Never synced</span>';
+		if (t.lastSyncSuccess) {
+			const successTime = new Date(t.lastSyncSuccess).getTime();
+			const attemptTime = t.lastSyncAttempt ? new Date(t.lastSyncAttempt).getTime() : 0;
+			if (attemptTime - successTime > 60000) {
+				syncBadge = `<span class="sync-badge sync-badge-stale" title="Last attempt: ${escapeHtml(t.lastSyncAttempt)}">Stale (${escapeHtml(Dot.Utils.formatRelativeTime(t.lastSyncAttempt))})</span>`;
+			} else {
+				syncBadge = `<span class="sync-badge sync-badge-fresh" title="Synced: ${escapeHtml(t.lastSyncSuccess)}">Synced ${escapeHtml(Dot.Utils.formatRelativeTime(t.lastSyncSuccess))}</span>`;
+			}
+		}
+
+		return `
 		<tr>
 			<td><code>${escapeHtml(t.id)}</code></td>
 			<td>
@@ -255,8 +268,9 @@ function renderTournaments() {
 					<strong>${escapeHtml(t.name)}</strong>
 				</a>
 			</td>
-			<td><span class="badge badge-${getStatusBadgeClass(t.status)}">${t.status}</span></td>
-			<td>${t.format || '—'}</td>
+			<td><span class="badge badge-${getStatusBadgeClass(t.status)}">${escapeHtml(t.status)}</span></td>
+			<td>${syncBadge}</td>
+			<td>${escapeHtml(t.format || '—')}</td>
 			<td style="color: var(--success);">${t.verifiedCount || 0}</td>
 			<td style="color: var(--warning);">${t.unverifiedCount || 0}</td>
 			<td>
@@ -268,7 +282,8 @@ function renderTournaments() {
 				</div>
 			</td>
 		</tr>
-	`).join('');
+	`;
+	}).join('');
 }
 
 // Get badge class for status

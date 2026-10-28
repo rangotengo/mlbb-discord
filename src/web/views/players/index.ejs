@@ -11,9 +11,47 @@
 		</button>
 	</div>
 
-	<div class="search-bar">
-		<input type="text" class="search-input" id="search-input" placeholder="Search by email or Discord username...">
-		<button class="btn btn-secondary" id="clear-btn" onclick="clearSearch()">Clear</button>
+	<div class="card" style="margin-bottom: 20px; padding: 16px;">
+		<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; align-items: end;">
+			<div class="form-group" style="margin: 0;">
+				<label for="search-input" class="form-label" style="font-size: 13px;">Search (Discord / Email)</label>
+				<input type="text" class="form-input" id="search-input" placeholder="Search email or discord...">
+			</div>
+			<div class="form-group" style="margin: 0;">
+				<label for="filter-team" class="form-label" style="font-size: 13px;">Team Name</label>
+				<input type="text" class="form-input" id="filter-team" placeholder="Filter by team...">
+			</div>
+			<div class="form-group" style="margin: 0;">
+				<label for="filter-verified" class="form-label" style="font-size: 13px;">Verification</label>
+				<select class="form-input" id="filter-verified">
+					<option value="">All statuses</option>
+					<option value="true">Verified only</option>
+					<option value="false">Unverified only</option>
+				</select>
+			</div>
+			<div class="form-group" style="margin: 0;">
+				<label for="filter-limit" class="form-label" style="font-size: 13px;">Page Size</label>
+				<select class="form-input" id="filter-limit">
+					<option value="25" selected>25 per page</option>
+					<option value="50">50 per page</option>
+					<option value="100">100 per page</option>
+					<option value="10">10 per page</option>
+				</select>
+			</div>
+			<div style="display: flex; gap: 8px;">
+				<button class="btn btn-primary" id="btn-search-apply" onclick="applySearchFilters()">Search</button>
+				<button class="btn btn-secondary" id="clear-btn" onclick="clearAllFilters()">Clear</button>
+			</div>
+		</div>
+	</div>
+
+	<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+		<div id="players-stats" style="color: var(--text-secondary); font-size: 14px;">
+			Loading players…
+		</div>
+		<div id="email-masked-notice" style="display: none;">
+			<span class="badge badge-secondary" title="Emails are masked to protect participant privacy">🔒 Emails Masked</span>
+		</div>
 	</div>
 
 	<div class="table-container">
@@ -36,6 +74,22 @@
 				</tr>
 			</tbody>
 		</table>
+	</div>
+
+	<!-- Pagination bar -->
+	<div class="pagination-bar" id="pagination-bar" style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px; flex-wrap: wrap; gap: 12px;">
+		<div style="color: var(--text-secondary); font-size: 14px;" id="pagination-summary">
+			Page 1 of 1
+		</div>
+		<div style="display: flex; gap: 8px; align-items: center;">
+			<button class="btn btn-secondary btn-sm" id="btn-prev-page" onclick="changePage(-1)" disabled>
+				&larr; Previous
+			</button>
+			<span id="pagination-page-indicator" style="font-size: 14px; font-weight: 600; padding: 0 8px;">1</span>
+			<button class="btn btn-secondary btn-sm" id="btn-next-page" onclick="changePage(1)" disabled>
+				Next &rarr;
+			</button>
+		</div>
 	</div>
 </div>
 
@@ -60,7 +114,7 @@
 			<div class="form-group">
 				<label class="form-label">Email</label>
 				<input type="email" class="form-input" id="edit-email" readonly>
-				<div class="form-help">Email cannot be changed</div>
+				<div class="form-help">Email cannot be changed (masked for privacy)</div>
 			</div>
 			<div class="form-group">
 				<label class="form-label">Team</label>

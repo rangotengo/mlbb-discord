@@ -173,3 +173,95 @@ header {
 .log-info {
   color: #89b4fa;
 }
+
+#config-screen {
+  max-width: 760px;
+}
+
+.step-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 16px;
+}
+
+.step-nav button {
+  padding: 6px 10px;
+  background: #313244;
+  color: #cdd6f4;
+  font-weight: 600;
+}
+
+.step-nav button[aria-current="step"] {
+  background: #89b4fa;
+  color: #1e1e2e;
+}
+
+.step-nav button.done {
+  outline: 1px solid #a6e3a1;
+}
+
+.wizard-step h2 {
+  margin-top: 0;
+}
+
+.hint, .recovery {
+  color: #a6adc8;
+  margin: 8px 0;
+  line-height: 1.4;
+}
+
+.warning {
+  background: #45302a;
+  color: #fab387;
+  padding: 10px 12px;
+  border-radius: 6px;
+  margin: 10px 0;
+}
+
+.check-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.check-list li {
+  background: #313244;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.check-list .state {
+  font-weight: 700;
+  margin-right: 8px;
+}
+
+.state-pass { color: #a6e3a1; }
+.state-fail { color: #f38ba8; }
+.state-unavailable, .state-not-checked { color: #f9e2af; }
+
+select, textarea {
+  width: 100%;
+  padding: 10px;
+  margin-top: 5px;
+  background: #313244;
+  border: 1px solid #45475a;
+  color: #cdd6f4;
+  border-radius: 6px;
+}
+
+.field-error {
+  color: #f38ba8;
+  margin-top: 4px;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+#status-region {
+  min-height: 1.2em;
+}

@@ -1,0 +1,383 @@
+/* ═══════════════════════════════════════
+   ACCESSIBILITY & MOBILE IMPROVEMENTS (guide 19)
+   ───────────────────────────────────────
+   - Screen-reader-only text
+   - Visible keyboard focus everywhere
+   - Responsive table overflow (narrow screens / zoom)
+   - Skip link
+   - Touch-friendly hit areas
+   ═══════════════════════════════════════ */
+
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+/* Focus visibility for keyboard users */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+	outline: 2px solid var(--accent-bright);
+	outline-offset: 2px;
+	border-radius: var(--radius-sm);
+}
+
+.table a:focus-visible {
+	outline-offset: 1px;
+}
+
+/* Skip link: hidden until focused via keyboard */
+.skip-link {
+	position: absolute;
+	left: -9999px;
+	top: 0;
+	z-index: var(--z-toast);
+	padding: 10px 16px;
+	background: var(--accent);
+	color: #fff;
+	border-radius: var(--radius-md);
+	font-weight: 600;
+	font-size: 14px;
+}
+
+.skip-link:focus {
+	left: var(--space-4);
+	top: var(--space-4);
+}
+
+/* Toast dismissal animation (set by app.js) */
+.toast-out {
+	opacity: 0;
+	transform: translateX(24px);
+	transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* Body scroll lock while a modal is open */
+body.modal-open {
+	overflow: hidden;
+}
+
+/* Plain message text inside modals (text-rendered, never markup) */
+.modal-plain-message {
+	color: var(--text-primary);
+	margin: 0;
+	font-size: 14.5px;
+	line-height: 1.55;
+}
+
+/* Tables scroll horizontally on narrow screens instead of overflowing the page */
+.table-container {
+	overflow-x: auto;
+	-webkit-overflow-scrolling: touch;
+}
+
+.table {
+	min-width: 640px;
+}
+
+.table-sm {
+	min-width: 520px;
+}
+
+/* Stale-data and provenance labels (guides 15/16) */
+.sync-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 10px;
+	border-radius: var(--radius-full);
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.sync-badge-fresh {
+	background: var(--success-subtle);
+	border: 1px solid var(--success-border);
+	color: var(--success);
+}
+
+.sync-badge-stale {
+	background: var(--warning-subtle);
+	border: 1px solid var(--warning-border);
+	color: var(--warning);
+}
+
+.sync-badge-never {
+	background: rgba(255, 255, 255, 0.04);
+	border: 1px solid var(--border-medium);
+	color: var(--text-secondary);
+}
+
+.data-source-note {
+	font-size: 12.5px;
+	color: var(--text-secondary);
+}
+
+/* Provenance pills: local setting vs remote-controlled value (guide 15) */
+.provenance-pill {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: var(--radius-full);
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.03em;
+}
+
+.provenance-local {
+	background: var(--accent-subtle);
+	color: var(--accent-bright);
+	border: 1px solid var(--accent-border);
+}
+
+.provenance-remote {
+	background: var(--info-subtle);
+	color: var(--info);
+	border: 1px solid var(--info-border);
+}
+
+/* Checklist (guide 11) */
+.checklist {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.checklist-item {
+	display: flex;
+	gap: 12px;
+	align-items: flex-start;
+	padding: 12px 14px;
+	background: var(--bg-tertiary);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+}
+
+.checklist-item[data-state="done"] { border-left: 3px solid var(--success); }
+.checklist-item[data-state="blocked"] { border-left: 3px solid var(--danger); }
+.checklist-item[data-state="warn"] { border-left: 3px solid var(--warning); }
+.checklist-item[data-state="todo"] { border-left: 3px solid var(--border-strong); }
+
+.checklist-mark {
+	width: 22px;
+	height: 22px;
+	flex-shrink: 0;
+	border-radius: 50%;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 12px;
+	font-weight: 700;
+	border: 1px solid var(--border-strong);
+	color: var(--text-secondary);
+	background: var(--bg-elevated);
+}
+
+.checklist-item[data-state="done"] .checklist-mark {
+	background: var(--success-subtle);
+	border-color: var(--success-border);
+	color: var(--success);
+}
+
+.checklist-item[data-state="blocked"] .checklist-mark {
+	background: var(--danger-subtle);
+	border-color: var(--danger-border);
+	color: var(--danger);
+}
+
+.checklist-item[data-state="warn"] .checklist-mark {
+	background: var(--warning-subtle);
+	border-color: var(--warning-border);
+	color: var(--warning);
+}
+
+.checklist-body { flex: 1; min-width: 0; }
+.checklist-title { font-weight: 600; font-size: 14px; color: var(--text-primary); }
+.checklist-detail { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+.checklist-link { font-size: 12.5px; color: var(--accent-bright); margin-top: 4px; display: inline-block; }
+
+/* Overview counters (guide 18) */
+.overview-counter {
+	padding: 14px 16px;
+	background: var(--bg-tertiary);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	display: block;
+	transition: border-color var(--ease-fast);
+}
+
+.overview-counter:hover { border-color: var(--border-strong); }
+
+.overview-counter-value {
+	font-size: 22px;
+	font-weight: 700;
+	color: var(--text-primary);
+	display: block;
+}
+
+.overview-counter-label {
+	font-size: 12px;
+	color: var(--text-secondary);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	font-weight: 600;
+}
+
+.overview-counter[data-state="alert"] { border-left: 3px solid var(--danger); }
+.overview-counter[data-state="warn"] { border-left: 3px solid var(--warning); }
+.overview-counter[data-state="ok"] { border-left: 3px solid var(--success); }
+
+/* Pagination (guide 20) */
+.pagination {
+	display: flex;
+	gap: var(--space-2);
+	align-items: center;
+	justify-content: center;
+	padding: var(--space-4) 0 var(--space-2);
+	flex-wrap: wrap;
+}
+
+.pagination-info {
+	font-size: 13px;
+	color: var(--text-secondary);
+}
+
+/* Import classification badges (guide 13) */
+.row-badge {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: var(--radius-full);
+	font-size: 11px;
+	font-weight: 600;
+}
+
+.row-badge-added { background: var(--success-subtle); color: var(--success); }
+.row-badge-changed { background: var(--info-subtle); color: var(--info); }
+.row-badge-unchanged { background: rgba(255,255,255,0.05); color: var(--text-secondary); }
+.row-badge-rejected { background: var(--danger-subtle); color: var(--danger); }
+
+/* Timezone dual display (guide 14) */
+.tz-pair {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.tz-main { color: var(--text-primary); }
+
+.tz-alt {
+	color: var(--text-secondary);
+	font-size: 12px;
+}
+
+.tz-label {
+	font-size: 11px;
+	letter-spacing: 0.03em;
+}
+
+/* Empty / loading / error states with next actions (guide 18/19) */
+.state-box {
+	text-align: center;
+	padding: 36px 20px;
+	border: 1px dashed var(--border-medium);
+	border-radius: var(--radius-md);
+	color: var(--text-secondary);
+}
+
+.state-box-title { font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+.state-box-help { font-size: 13px; margin-bottom: 12px; }
+
+/* Support & privacy views (guides 23/24) */
+.readiness-list { display: flex; flex-direction: column; gap: 8px; }
+
+.readiness-item {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	align-items: center;
+	padding: 10px 14px;
+	background: var(--bg-tertiary);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	font-size: 13.5px;
+}
+
+.readiness-item[data-state="ok"] { border-left: 3px solid var(--success); }
+.readiness-item[data-state="warn"] { border-left: 3px solid var(--warning); }
+.readiness-item[data-state="fail"] { border-left: 3px solid var(--danger); }
+.readiness-item[data-state="unknown"] { border-left: 3px solid var(--border-strong); }
+
+.readiness-status { font-weight: 600; white-space: nowrap; }
+.readiness-item[data-state="ok"] .readiness-status { color: var(--success); }
+.readiness-item[data-state="warn"] .readiness-status { color: var(--warning); }
+.readiness-item[data-state="fail"] .readiness-status { color: var(--danger); }
+.readiness-item[data-state="unknown"] .readiness-status { color: var(--text-secondary); }
+
+/* Mobile refinements: comfortable touch targets and header layout */
+@media (max-width: 768px) {
+	.btn { min-height: 38px; }
+	.btn-sm { min-height: 34px; }
+
+	.header {
+		padding: 0 var(--space-4);
+	}
+
+	.header-left .logo { font-size: 16px; }
+
+	.page-header {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: var(--space-3);
+	}
+
+	.header-actions {
+		flex-wrap: wrap;
+		width: 100%;
+	}
+
+	.pane-actions,
+	.filters {
+		flex-wrap: wrap;
+	}
+
+	.toast {
+		min-width: 0;
+		max-width: none;
+		width: calc(100vw - 32px);
+	}
+
+	.toast-container {
+		left: var(--space-4);
+		right: var(--space-4);
+		top: var(--space-4);
+		align-items: stretch;
+	}
+
+	.modal-overlay { padding: var(--space-3); }
+
+	.detail-tabs {
+		flex-direction: column;
+		align-items: stretch;
+		gap: var(--space-2);
+	}
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+}

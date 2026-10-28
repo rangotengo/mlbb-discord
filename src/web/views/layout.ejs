@@ -4,28 +4,35 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title><%= title %> - Dot Tournament Admin</title>
+	<meta name="<%= locals.csrfMetaName || 'csrf-token' %>" content="<%= locals.csrfToken || '' %>">
 	<link rel="stylesheet" href="/css/reset.css">
 	<link rel="stylesheet" href="/css/variables.css">
 	<link rel="stylesheet" href="/css/layout.css">
 	<link rel="stylesheet" href="/css/components.css">
 	<link rel="stylesheet" href="/css/pages.css">
+	<link rel="stylesheet" href="/css/accessibility.css">
 </head>
 <body>
+	<a class="skip-link" href="#main-content">Skip to main content</a>
 	<div class="app-container">
 		<header class="header">
 			<div class="header-left">
+				<button class="nav-toggle" id="nav-toggle" type="button" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="main-navigation">
+					<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+				</button>
 				<h1 class="logo">Dot Tournament Admin</h1>
 			</div>
 			<div class="header-right">
-				<div class="status-indicator">
-					<span class="status-dot"></span>
-					<span class="status-text">System Online</span>
+				<a class="header-link" href="/logout">Log out</a>
+				<div class="status-indicator" id="health-indicator" title="Dashboard server status">
+					<span class="status-dot" id="health-dot"></span>
+					<span class="status-text" id="health-text">Checking…</span>
 				</div>
 			</div>
 		</header>
 
 		<div class="main-layout">
-			<nav class="sidebar">
+			<nav class="sidebar" id="main-navigation" aria-label="Main navigation">
 				<a href="/tournaments" class="nav-item <%= path.startsWith('/tournaments') ? 'active' : '' %>">
 					<span class="nav-label">Tournaments</span>
 				</a>
@@ -33,20 +40,66 @@
 					<span class="nav-label">Player Search</span>
 				</a>
 				<a href="/system" class="nav-item <%= path === '/system' ? 'active' : '' %>">
-					<span class="nav-label">System Status</span>
+					<span class="nav-label">System Overview</span>
+				</a>
+				<a href="/privacy" class="nav-item <%= path === '/privacy' ? 'active' : '' %>">
+					<span class="nav-label">Privacy &amp; Retention</span>
+				</a>
+				<a href="/support" class="nav-item <%= path === '/support' ? 'active' : '' %>">
+					<span class="nav-label">Support &amp; Diagnostics</span>
 				</a>
 				<a href="/config" class="nav-item <%= path === '/config' ? 'active' : '' %>">
 					<span class="nav-label">Configuration</span>
 				</a>
 			</nav>
 
-			<main class="content">
+			<main class="content" id="main-content">
 				<%- body %>
 			</main>
 		</div>
 	</div>
 
+	<script src="/js/dot-helpers.js"></script>
 	<script src="/js/app.js"></script>
+	<script>
+		// Header health indicator: reflects real /api/health responses instead of a
+		// hardcoded "System Online" label (guide 24).
+		(function () {
+			var dot = document.getElementById('health-dot');
+			var text = document.getElementById('health-text');
+			if (!dot || !text) return;
+
+			function setState(className, label, tooltip) {
+				dot.className = 'status-dot ' + className;
+				text.textContent = label;
+				document.getElementById('health-indicator').setAttribute('title', tooltip || label);
+			}
+
+			function check() {
+				fetch('/api/health', { headers: { 'Content-Type': 'application/json' } })
+					.then(function (response) {
+						if (!response.ok) throw new Error('HTTP ' + response.status);
+						return response.json();
+					})
+					.then(function (body) {
+						// The health endpoint may be a plain liveness check today;
+						// readiness diagnostics land separately (guide 24).
+						var status = body && body.status ? body.status : 'ok';
+						if (status === 'ok') {
+							setState('status-ok', 'Online', 'Dashboard server is responding.');
+						} else {
+							setState('status-warn', status, 'Dashboard server reported status: ' + status);
+						}
+					})
+					.catch(function () {
+						setState('status-down', 'Offline', 'Cannot reach the dashboard server.');
+					});
+			}
+
+			check();
+			window.setInterval(check, 30000);
+		})();
+	</script>
 	<%- defineContent('script') %>
 </body>
 </html>

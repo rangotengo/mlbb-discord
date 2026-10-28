@@ -5,9 +5,10 @@
 				<a href="/tournaments">Tournaments</a> / <span id="header-id"><%= tournamentId %></span>
 			</div>
 			<h2 class="page-title" id="t-name">Loading...</h2>
-			<div class="header-meta" style="margin-top: 8px; display: flex; gap: 8px; align-items: center;">
+			<div class="header-meta" style="margin-top: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
 				<span id="t-status-badge" class="badge">...</span>
 				<span id="t-format" style="color: var(--text-secondary); font-size: 14px;">...</span>
+				<span id="t-sync-freshness" class="sync-badge sync-badge-never">Sync: Checking…</span>
 			</div>
 		</div>
 		<div class="header-actions">
@@ -32,6 +33,20 @@
 		<div class="info-card">
 			<div class="info-label">Unverified Teams</div>
 			<div class="info-value" id="t-unverified-count" style="color: var(--warning);">&mdash;</div>
+		</div>
+	</div>
+
+	<!-- Setup Checklist (Guide 11) -->
+	<div class="card" id="tournament-checklist-card" style="margin-bottom: 24px;">
+		<div class="card-header" style="cursor: pointer;" onclick="toggleChecklist()">
+			<div style="display: flex; align-items: center; gap: 10px;">
+				<h3 class="card-title" style="margin: 0;">Tournament Setup Checklist</h3>
+				<span id="checklist-progress-badge" class="badge badge-secondary">0 / 5</span>
+			</div>
+			<button class="btn btn-secondary btn-sm" type="button" id="btn-toggle-checklist">Collapse</button>
+		</div>
+		<div class="card-body" id="checklist-container" style="padding: 16px 20px;">
+			<div class="checklist" id="checklist-items"></div>
 		</div>
 	</div>
 
@@ -62,7 +77,7 @@
 				<span class="btn-icon">
 					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
 				</span>
-				Sync from Challonge
+				Sync from Challengermode
 			</button>
 		</div>
 	</div>
@@ -86,26 +101,34 @@
 						<th>Captain Name</th>
 						<th>Email</th>
 						<th>Discord</th>
-						<th>Challonge ID</th>
+						<th>Challengermode ID</th>
 						<th>Verified</th>
+						<th>Readiness</th>
 						<th class="actions-col">Actions</th>
 					</tr>
 				</thead>
 				<tbody id="participants-body">
-					<tr><td colspan="7" class="loading-row"><div class="spinner"></div> Loading participants...</td></tr>
+					<tr><td colspan="8" class="loading-row"><div class="spinner"></div> Loading participants...</td></tr>
 				</tbody>
 			</table>
 		</div>
 	</div>
 
 	<div class="tab-pane" id="pane-schedules">
-		<div class="pane-actions">
+		<div class="pane-actions" style="flex-wrap: wrap;">
 			<button class="btn btn-secondary" onclick="openScheduleModal()">
 				<span class="btn-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></span> Add Schedule
 			</button>
 			<button class="btn btn-primary" onclick="openCSVImportModal('schedules')">
 				<span class="btn-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span> Import CSV
 			</button>
+			<button class="btn btn-secondary" onclick="exportSchedulesIcs()">
+				<span class="btn-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></span> Export .ics Calendar
+			</button>
+			<div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+				<label for="tz-view-select" style="font-size: 13px; color: var(--text-secondary); font-weight: 500;">Display Timezone:</label>
+				<select id="tz-view-select" class="form-input" style="width: auto; padding: 4px 8px; font-size: 13px;" onchange="onTimezoneChange()"></select>
+			</div>
 			<button class="help-link" style="background: none; border: none; padding: 0;" onclick="openCSVFormatModal('schedules')">CSV Format Guide</button>
 		</div>
 		<div class="table-container">
@@ -115,7 +138,7 @@
 						<th>Match</th>
 						<th>Round</th>
 						<th>Teams</th>
-						<th>Scheduled Time</th>
+						<th>Scheduled Time (Dual TZ)</th>
 						<th>Thread ID</th>
 						<th>Notified</th>
 						<th class="actions-col">Actions</th>
@@ -166,16 +189,37 @@
 			<div id="csv-options-section" class="csv-options-section" style="display: none;">
 				<div class="form-group">
 					<label class="checkbox-label">
-						<input type="checkbox" id="csv-register-challonge">
-						<span>Register participants to Challonge</span>
+						<input type="checkbox" id="csv-register-challonge" disabled>
+						<span>Registration is managed on Challengermode</span>
 					</label>
-					<p class="help-text">Automatically create Challonge participants for imported players</p>
+					<p class="help-text">Import players here, register teams on Challengermode, then sync to match team names.</p>
+				</div>
+				<div class="form-group" style="margin-top: 12px;">
+					<label class="form-label" style="font-weight: 600; font-size: 13px;">Import Mode (Guide 13)</label>
+					<div style="display: flex; gap: 20px; align-items: center; margin-top: 4px; flex-wrap: wrap;">
+						<label class="checkbox-label">
+							<input type="radio" name="csv-mode" value="partial" id="csv-mode-partial" checked>
+							<span><strong>Partial</strong> (import valid rows, skip invalid)</span>
+						</label>
+						<label class="checkbox-label">
+							<input type="radio" name="csv-mode" value="all-or-nothing" id="csv-mode-aon">
+							<span><strong>All-or-Nothing</strong> (validate all rows before saving)</span>
+						</label>
+					</div>
 				</div>
 			</div>
 
 			<!-- Preview Section -->
 			<div id="csv-preview-section" class="csv-preview-section" style="display: none;">
-				<h4>Preview (<span id="csv-preview-count">0</span> rows)</h4>
+				<div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+					<h4>Preview (<span id="csv-preview-count">0</span> rows)</h4>
+					<div id="csv-diff-badges" style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;"></div>
+				</div>
+				<div id="csv-rejection-bar" style="display: none; margin: 10px 0;">
+					<button class="btn btn-secondary btn-sm" id="btn-download-rejections" type="button" onclick="downloadRejectedRowsCSV()">
+						Download Rejected Rows (.csv)
+					</button>
+				</div>
 				<div class="table-container table-preview">
 					<table class="table table-sm">
 						<thead id="csv-preview-thead"></thead>
@@ -243,9 +287,19 @@
 		<div class="modal-body">
 			<form id="schedule-form" onsubmit="saveSchedule(event)">
 				<input type="hidden" id="schedule-id">
-				<div class="form-group">
-					<label for="schedule-match-id" class="form-label">Match ID *</label>
-					<input type="number" id="schedule-match-id" class="form-input" required>
+				<div class="form-group" id="match-selector-group">
+					<label for="schedule-match-select" class="form-label">Tournament Match *</label>
+					<select id="schedule-match-select" class="form-input" onchange="onMatchSelectDropdownChange()">
+						<option value="">Select a match…</option>
+					</select>
+					<div style="margin-top: 4px; display: flex; justify-content: space-between; align-items: center;">
+						<span class="help-text" id="match-selector-hint">Matches from Challengermode</span>
+						<button type="button" class="help-link" style="background: none; border: none; padding: 0; font-size: 12px;" onclick="toggleManualMatchInput()">Enter UUID manually</button>
+					</div>
+				</div>
+				<div class="form-group" id="manual-match-group" style="display: none;">
+					<label for="schedule-match-id" class="form-label">Match Series UUID *</label>
+					<input type="text" id="schedule-match-id" placeholder="Challengermode match series UUID" class="form-input">
 				</div>
 				<div class="form-group" id="schedule-teams-container" style="display: none;">
 					<label class="form-label">Teams</label>
@@ -410,7 +464,7 @@ captain3@example.com,Bob Wilson,Team Gamma,</pre>
 					<tbody>
 						<tr>
 							<td><code>match_id</code></td>
-							<td>Unique match identifier</td>
+							<td>Challengermode match series UUID (use the schedule export)</td>
 							<td>Yes</td>
 						</tr>
 						<tr>
@@ -955,21 +1009,39 @@ captain3@example.com,Bob Wilson,Team Gamma,</pre>
 <%- contentFor('script') %>
 <script>
 const tournamentId = "<%= tournamentId %>";
+let currentTournamentData = null;
+let currentParticipants = [];
+let currentSchedules = [];
+let currentMatches = [];
+let currentViewTz = (typeof Intl !== 'undefined' && Intl.DateTimeFormat) ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC';
+let isChecklistCollapsed = false;
 
 document.addEventListener('DOMContentLoaded', () => {
-	const tzSelect = document.getElementById('schedule-timezone');
-	if (tzSelect && Intl.supportedValuesOf) {
+	// Initialize timezones for modal and view select
+	if (typeof Intl !== 'undefined' && Intl.supportedValuesOf) {
 		const timezones = Intl.supportedValuesOf('timeZone');
-		const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-		
+		const modalTzSelect = document.getElementById('schedule-timezone');
+		const viewTzSelect = document.getElementById('tz-view-select');
+
+		if (viewTzSelect) viewTzSelect.innerHTML = '';
+		if (modalTzSelect) modalTzSelect.innerHTML = '<option value="">Select a timezone...</option>';
+
 		timezones.forEach(tz => {
-			const option = document.createElement('option');
-			option.value = tz;
-			option.textContent = tz.replace(/_/g, ' ');
-			if (tz === localTz) {
-				option.selected = true;
+			const label = tz.replace(/_/g, ' ');
+			if (modalTzSelect) {
+				const opt1 = document.createElement('option');
+				opt1.value = tz;
+				opt1.textContent = label;
+				if (tz === currentViewTz) opt1.selected = true;
+				modalTzSelect.appendChild(opt1);
 			}
-			tzSelect.appendChild(option);
+			if (viewTzSelect) {
+				const opt2 = document.createElement('option');
+				opt2.value = tz;
+				opt2.textContent = label;
+				if (tz === currentViewTz) opt2.selected = true;
+				viewTzSelect.appendChild(opt2);
+			}
 		});
 	}
 
@@ -980,6 +1052,14 @@ document.addEventListener('DOMContentLoaded', () => {
 	}
 });
 
+function onTimezoneChange() {
+	const sel = document.getElementById('tz-view-select');
+	if (sel) {
+		currentViewTz = sel.value || 'UTC';
+		renderSchedules(currentSchedules);
+	}
+}
+
 async function loadTournamentData() {
 	try {
 		const [tRes, pRes, sRes] = await Promise.all([
@@ -988,18 +1068,23 @@ async function loadTournamentData() {
 			Dot.API.get(`/api/tournaments/${tournamentId}/schedules`)
 		]);
 
-		renderInfo(tRes.data);
-		renderParticipants(pRes.data || []);
-		renderSchedules(sRes.data || []);
+		currentTournamentData = tRes.data || {};
+		currentParticipants = pRes.data || [];
+		currentSchedules = sRes.data || [];
+
+		renderInfo(currentTournamentData);
+		renderChecklist(currentTournamentData, currentParticipants, currentSchedules);
+		renderParticipants(currentParticipants);
+		renderSchedules(currentSchedules);
 	} catch (error) {
 		console.error("Failed to load tournament data:", error);
-		Dot.Toast.error("Failed to load tournament data");
+		Dot.Toast.error("Failed to load tournament data: " + error.message);
 	}
 }
 
 function renderInfo(t) {
 	document.getElementById('t-name').textContent = t.name || tournamentId;
-	
+
 	// Status
 	const statusEl = document.getElementById('t-status-badge');
 	const status = t.status || 'unknown';
@@ -1007,6 +1092,30 @@ function renderInfo(t) {
 	statusEl.className = `badge badge-${getStatusBadgeClass(status)}`;
 
 	document.getElementById('t-format').textContent = t.format || 'Unknown Format';
+
+	// Sync freshness badge (Guide 15)
+	const syncFreshnessEl = document.getElementById('t-sync-freshness');
+	if (syncFreshnessEl) {
+		if (t.lastSyncSuccess) {
+			const successMs = new Date(t.lastSyncSuccess).getTime();
+			const attemptMs = t.lastSyncAttempt ? new Date(t.lastSyncAttempt).getTime() : 0;
+			if (attemptMs - successMs > 60000) {
+				syncFreshnessEl.className = 'sync-badge sync-badge-stale';
+				syncFreshnessEl.textContent = `Sync: Stale (failed ${Dot.Utils.formatRelativeTime(t.lastSyncAttempt)})`;
+				syncFreshnessEl.title = `Last attempt: ${t.lastSyncAttempt}`;
+			} else {
+				syncFreshnessEl.className = 'sync-badge sync-badge-fresh';
+				syncFreshnessEl.textContent = `Synced ${Dot.Utils.formatRelativeTime(t.lastSyncSuccess)}`;
+				syncFreshnessEl.title = `Synced successfully: ${t.lastSyncSuccess}`;
+			}
+		} else if (t.lastSyncAttempt) {
+			syncFreshnessEl.className = 'sync-badge sync-badge-stale';
+			syncFreshnessEl.textContent = `Sync failed (${Dot.Utils.formatRelativeTime(t.lastSyncAttempt)})`;
+		} else {
+			syncFreshnessEl.className = 'sync-badge sync-badge-never';
+			syncFreshnessEl.textContent = 'Sync: Never synced';
+		}
+	}
 
 	// Info Cards
 	document.getElementById('t-server').textContent = t.server || '—';
@@ -1035,6 +1144,67 @@ function renderInfo(t) {
 	}
 }
 
+// Setup Checklist Evaluator (Guide 11)
+function renderChecklist(t, participants, schedules) {
+	const container = document.getElementById('checklist-items');
+	const badge = document.getElementById('checklist-progress-badge');
+	if (!container || !window.DotHelpers) return;
+
+	let timesSet = 0;
+	schedules.forEach(s => {
+		if (!s.scheduledTime) return;
+		const d = new Date(s.scheduledTime);
+		if (!isNaN(d.getTime()) && d.getFullYear() <= 2090) {
+			timesSet++;
+		}
+	});
+
+	// Unmatched teams: participants without a Challengermode/Challonge ID
+	const unmatchedTeams = participants.filter(p => !p.challongeId).length;
+
+	const items = DotHelpers.evaluateChecklist({
+		participantCount: participants.length,
+		unmatchedTeams: unmatchedTeams,
+		checkInDisabled: t.checkInDisabled,
+		scheduleCount: schedules.length,
+		timesSet: timesSet,
+		activeRounds: t.activeRounds || (schedules.some(s => s.threadId) ? 1 : 0)
+	});
+
+	container.textContent = '';
+	let doneCount = 0;
+
+	items.forEach(item => {
+		if (item.done) doneCount++;
+		const stateAttr = item.done ? 'done' : (item.blocked ? 'blocked' : (item.warn ? 'warn' : 'todo'));
+		const markIcon = item.done ? '✓' : (item.blocked ? '!' : (item.warn ? '▲' : '○'));
+
+		const itemEl = Dot.Utils.el('div', { class: 'checklist-item', 'data-state': stateAttr },
+			Dot.Utils.el('span', { class: 'checklist-mark', text: markIcon }),
+			Dot.Utils.el('div', { class: 'checklist-body' },
+				Dot.Utils.el('div', { class: 'checklist-title', text: item.label }),
+				Dot.Utils.el('div', { class: 'checklist-detail', text: item.detail }),
+				item.action ? Dot.Utils.el('a', { class: 'checklist-link', href: item.action, text: 'Go to action →' }) : null
+			)
+		);
+		container.appendChild(itemEl);
+	});
+
+	if (badge) {
+		badge.textContent = `${doneCount} / ${items.length}`;
+		badge.className = `badge badge-${doneCount === items.length ? 'success' : 'secondary'}`;
+	}
+}
+
+function toggleChecklist() {
+	const card = document.getElementById('checklist-container');
+	const btn = document.getElementById('btn-toggle-checklist');
+	if (!card || !btn) return;
+	isChecklistCollapsed = !isChecklistCollapsed;
+	card.style.display = isChecklistCollapsed ? 'none' : 'block';
+	btn.textContent = isChecklistCollapsed ? 'Expand' : 'Collapse';
+}
+
 function getStatusBadgeClass(status) {
 	switch (status) {
 		case 'preparing': return 'warning';
@@ -1042,60 +1212,6 @@ function getStatusBadgeClass(status) {
 		case 'complete': return 'success';
 		default: return 'secondary';
 	}
-}
-
-function renderParticipants(participants) {
-	const tbody = document.getElementById('participants-body');
-	
-	if (!participants.length) {
-		tbody.innerHTML = `<tr><td colspan="5" class="empty-state"><div class="empty-state-text">No participants enrolled</div></td></tr>`;
-		return;
-	}
-
-	tbody.innerHTML = participants.map(p => `
-		<tr>
-			<td><strong>${escapeHtml(p.team)}</strong></td>
-			<td>${escapeHtml(p.name)}</td>
-			<td>${p.discordUsername ? escapeHtml(p.discordUsername) : '<span style="color:var(--text-secondary)">—</span>'}</td>
-			<td>${p.challongeId || '<span style="color:var(--text-secondary)">—</span>'}</td>
-			<td><span class="badge badge-${p.verified ? 'success' : 'warning'}">${p.verified ? 'Verified' : 'Unverified'}</span></td>
-		</tr>
-	`).join('');
-}
-
-function renderSchedules(schedules) {
-	const tbody = document.getElementById('schedules-body');
-	
-	if (!schedules.length) {
-		tbody.innerHTML = `<tr><td colspan="7" class="empty-state"><div class="empty-state-text">No matches scheduled</div></td></tr>`;
-		return;
-	}
-
-	tbody.innerHTML = schedules.map(s => {
-		const dateObj = new Date(s.scheduledTime);
-		let formattedDate = s.scheduledTime;
-		
-		if (!isNaN(dateObj.getTime())) {
-			if (dateObj.getFullYear() > 2090) {
-				formattedDate = '<span style="color:var(--text-secondary)">Not set</span>';
-			} else {
-				formattedDate = dateObj.toLocaleString(undefined, { 
-					weekday: 'short', month: 'short', day: 'numeric', 
-					hour: '2-digit', minute: '2-digit' 
-				});
-			}
-		}
-		
-		return `
-		<tr>
-			<td><strong>#${s.matchId}</strong></td>
-			<td>Round ${s.round || '?'}</td>
-			<td>${formattedDate}</td>
-			<td>${s.threadId || '<span style="color:var(--text-secondary)">—</span>'}</td>
-			<td><span class="${s.notified ? 'text-success' : 'text-secondary'}">${s.notified ? 'Yes' : 'No'}</span></td>
-		</tr>
-		`;
-	}).join('');
 }
 
 function switchTab(tabId) {
@@ -1143,7 +1259,7 @@ async function syncTournament() {
 	} finally {
 		const btn = document.getElementById('btn-sync');
 		btn.disabled = false;
-		btn.textContent = 'Sync from Challonge';
+		btn.textContent = 'Sync from Challengermode';
 	}
 }
 
@@ -1197,7 +1313,7 @@ function openCSVImportModal(type) {
 	const title = type === 'participants' ? 'Import Participants from CSV' : 'Import Schedules from CSV';
 	document.getElementById('csv-modal-title').textContent = title;
 
-	// Show/hide Challonge option
+	// Show/hide Challengermode option
 	document.getElementById('csv-options-section').style.display = type === 'participants' ? 'block' : 'none';
 
 	// Show modal
@@ -1284,21 +1400,66 @@ function formatFileSize(bytes) {
 	return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
-function parseAndPreviewCSV() {
+let lastPreviewRows = [];
+let lastRejectedRows = [];
+
+async function parseAndPreviewCSV() {
 	if (!currentCSVData) return;
 
-	const lines = currentCSVData.trim().split('\n').map(l => l.trim()).filter(l => l.length > 0);
+	const btn = document.getElementById('csv-import-btn');
+	const badgesEl = document.getElementById('csv-diff-badges');
+	const rejectionsBar = document.getElementById('csv-rejection-bar');
 
+	if (badgesEl) badgesEl.innerHTML = '';
+	if (rejectionsBar) rejectionsBar.style.display = 'none';
+	lastRejectedRows = [];
+	lastPreviewRows = [];
+
+	// Try the server preview endpoint (Contract agreed and landed)
+	try {
+		const res = await Dot.API.post(`/api/tournaments/${tournamentId}/${currentCSVImportType}/preview`, {
+			csv: currentCSVData
+		});
+
+		const preview = res.data || {};
+		lastPreviewRows = preview.rows || [];
+		lastRejectedRows = lastPreviewRows.filter(r => r.status === 'rejected');
+
+		if (badgesEl) {
+			badgesEl.innerHTML = `
+				<span class="row-badge row-badge-added">${preview.added || 0} added</span>
+				<span class="row-badge row-badge-changed">${preview.changed || 0} changed</span>
+				<span class="row-badge row-badge-unchanged">${preview.unchanged || 0} unchanged</span>
+				<span class="row-badge row-badge-rejected">${preview.rejected || 0} rejected</span>
+			`;
+		}
+
+		if (preview.rejected > 0) {
+			if (rejectionsBar) rejectionsBar.style.display = 'block';
+			showPreviewWarning(`${preview.rejected} row(s) contain validation errors and will be rejected. You can download the correction file below.`);
+		} else {
+			hidePreviewWarning();
+		}
+
+		renderServerPreviewRows(lastPreviewRows);
+		document.getElementById('csv-preview-count').textContent = lastPreviewRows.length;
+		document.getElementById('csv-preview-section').style.display = 'block';
+		document.getElementById('csv-options-section').style.display = 'block';
+		btn.disabled = false;
+		return;
+	} catch (err) {
+		console.warn('Server preview endpoint unavailable or failed, falling back to local preview:', err);
+	}
+
+	// Local fallback:
+	const lines = currentCSVData.trim().split('\n').map(l => l.trim()).filter(l => l.length > 0);
 	if (lines.length < 2) {
 		Dot.Toast.error('CSV must have at least a header and one data row');
 		return;
 	}
 
-	// Parse header
 	const headers = parseCSVRow(lines[0]);
 	parsedCSVRows = [];
-
-	// Parse data rows
 	for (let i = 1; i < lines.length; i++) {
 		const columns = parseCSVRow(lines[i]);
 		parsedCSVRows.push(columns);
@@ -1318,14 +1479,63 @@ function parseAndPreviewCSV() {
 		hidePreviewWarning();
 	}
 
-	// Render preview
 	renderCSVPreview(headers);
+	document.getElementById('csv-options-section').style.display = 'block';
+	btn.disabled = false;
+}
 
-	// Show options and enable import
-	if (currentCSVImportType === 'participants') {
-		document.getElementById('csv-options-section').style.display = 'block';
+function renderServerPreviewRows(rows) {
+	const thead = document.getElementById('csv-preview-thead');
+	const tbody = document.getElementById('csv-preview-tbody');
+
+	if (!rows.length) {
+		thead.innerHTML = '';
+		tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No rows to preview</td></tr>';
+		return;
 	}
-	document.getElementById('csv-import-btn').disabled = false;
+
+	const firstRowValues = rows[0].values || {};
+	const valKeys = Object.keys(firstRowValues);
+	const headers = ['Row', 'Status', ...valKeys, 'Notes'];
+
+	thead.innerHTML = '<tr>' + headers.map(h => `<th>${escapeHtml(h)}</th>`).join('') + '</tr>';
+
+	tbody.innerHTML = rows.slice(0, 15).map(r => {
+		const statusBadge = `<span class="row-badge row-badge-${r.status}">${escapeHtml(r.status)}</span>`;
+		const cells = valKeys.map(k => `<td>${escapeHtml(String((r.values && r.values[k]) || ''))}</td>`).join('');
+		const reasonCell = `<td>${escapeHtml(r.reason || '—')}</td>`;
+		return `<tr><td>${r.row}</td><td>${statusBadge}</td>${cells}${reasonCell}</tr>`;
+	}).join('');
+}
+
+function downloadRejectedRowsCSV() {
+	if (!lastRejectedRows.length) {
+		Dot.Toast.info('No rejected rows to download.');
+		return;
+	}
+
+	const firstVals = lastRejectedRows[0].values || {};
+	const headers = ['row', 'rejection_reason', ...Object.keys(firstVals)];
+	const rows = lastRejectedRows.map(r => ({
+		row: r.row,
+		rejection_reason: r.reason || 'Validation error',
+		...(r.values || {})
+	}));
+
+	const csvString = window.DotHelpers
+		? DotHelpers.buildCsv(rows, headers)
+		: [headers.join(','), ...rows.map(r => Object.values(r).join(','))].join('\n');
+
+	const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+	const url = URL.createObjectURL(blob);
+	const a = document.createElement('a');
+	a.href = url;
+	a.download = `rejected-${currentCSVImportType}-corrections.csv`;
+	document.body.appendChild(a);
+	a.click();
+	document.body.removeChild(a);
+	URL.revokeObjectURL(url);
+	Dot.Toast.success('Downloaded rejected rows for correction.');
 }
 
 function parseCSVRow(row) {
@@ -1388,33 +1598,46 @@ async function confirmCSVImport() {
 	btn.disabled = true;
 	btnText.textContent = 'Importing...';
 
+	const modeInput = document.querySelector('input[name=\"csv-mode\"]:checked');
+	const mode = modeInput ? modeInput.value : 'partial';
+
 	try {
 		const endpoint = `/api/tournaments/${tournamentId}/${currentCSVImportType}/import`;
-		const body = { csv: currentCSVData };
+		const body = { csv: currentCSVData, mode };
 
 		if (currentCSVImportType === 'participants') {
 			body.registerToChallonge = document.getElementById('csv-register-challonge').checked;
 		}
 
 		const response = await Dot.API.post(endpoint, body);
-
-		const data = response.data;
+		const data = response.data || {};
 		let message = `Import complete!`;
-		if (data.added) message += ` Added: ${data.added}.`;
-		if (data.updated) message += ` Updated: ${data.updated}.`;
-		if (data.errors?.length) message += ` Errors: ${data.totalErrors || data.errors.length}.`;
+		if (data.added !== undefined) message += ` Added: ${data.added}.`;
+		if (data.updated !== undefined) message += ` Updated: ${data.updated}.`;
+		if (data.unchanged !== undefined) message += ` Unchanged: ${data.unchanged}.`;
+		if (data.errors && data.errors.length) message += ` Errors: ${data.totalErrors || data.errors.length}.`;
 
 		Dot.Toast.success(message);
-
-		// Reload data
 		await loadTournamentData();
-
-		// Close modal
 		closeCSVImportModal();
 
 	} catch (error) {
 		console.error('CSV import failed:', error);
-		const errorMsg = error.response?.data?.error || 'Import failed. Please check your CSV format.';
+		const errorPayload = error.payload || {};
+		const errorMsg = errorPayload.error || error.message || 'Import failed. Please check your CSV format.';
+
+		// If all-or-nothing failed with rejected row data:
+		if (errorPayload.data && Array.isArray(errorPayload.data.rows)) {
+			lastPreviewRows = errorPayload.data.rows;
+			lastRejectedRows = lastPreviewRows.filter(r => r.status === 'rejected');
+			if (lastRejectedRows.length > 0) {
+				const rejectionsBar = document.getElementById('csv-rejection-bar');
+				if (rejectionsBar) rejectionsBar.style.display = 'block';
+				showPreviewWarning(`All-or-Nothing check failed: ${errorPayload.data.rejected || lastRejectedRows.length} row(s) rejected. Nothing was saved. Download the rejected rows below to correct them.`);
+				renderServerPreviewRows(lastPreviewRows);
+			}
+		}
+
 		Dot.Toast.error(errorMsg);
 	} finally {
 		btn.disabled = false;
@@ -1509,24 +1732,30 @@ async function deleteParticipant(id) {
 }
 
 // ============================================
+// ============================================
 // Schedule Modal Functions
 // ============================================
 
 let editingScheduleId = null;
 
-function openScheduleModal(schedule = null) {
+async function openScheduleModal(schedule = null) {
 	editingScheduleId = schedule ? schedule.id : null;
 
 	const title = schedule ? 'Edit Schedule' : 'Add Schedule';
 	document.getElementById('schedule-modal-title').textContent = title;
 
+	const manualGroup = document.getElementById('manual-match-group');
+	const selectorGroup = document.getElementById('match-selector-group');
+	const matchSelect = document.getElementById('schedule-match-select');
+	const matchIdInput = document.getElementById('schedule-match-id');
+	const teamsContainer = document.getElementById('schedule-teams-container');
+	const teamsDisplay = document.getElementById('schedule-teams-display');
+	const hint = document.getElementById('match-selector-hint');
+
 	if (schedule) {
 		document.getElementById('schedule-id').value = schedule.id;
-		document.getElementById('schedule-match-id').value = schedule.matchId;
-		
-		// Set teams display
-		const teamsContainer = document.getElementById('schedule-teams-container');
-		const teamsDisplay = document.getElementById('schedule-teams-display');
+		matchIdInput.value = schedule.matchId;
+
 		if (schedule.player1Name && schedule.player2Name) {
 			teamsDisplay.textContent = `${schedule.player1Name} vs ${schedule.player2Name}`;
 			teamsContainer.style.display = 'block';
@@ -1536,15 +1765,104 @@ function openScheduleModal(schedule = null) {
 
 		// Convert datetime to datetime-local format
 		const date = new Date(schedule.scheduledTime);
-		date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
-		document.getElementById('schedule-time').value = date.toISOString().slice(0, 16);
+		if (!isNaN(date.getTime())) {
+			date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+			document.getElementById('schedule-time').value = date.toISOString().slice(0, 16);
+		}
+		if (schedule.timezone) {
+			document.getElementById('schedule-timezone').value = schedule.timezone;
+		}
 	} else {
 		document.getElementById('schedule-form').reset();
 		document.getElementById('schedule-id').value = '';
-		document.getElementById('schedule-teams-container').style.display = 'none';
+		matchIdInput.value = '';
+		teamsContainer.style.display = 'none';
+		const defaultTz = document.getElementById('tz-view-select')?.value || currentViewTz;
+		if (defaultTz) {
+			document.getElementById('schedule-timezone').value = defaultTz;
+		}
 	}
 
+	manualGroup.style.display = 'none';
+	selectorGroup.style.display = 'block';
+	matchSelect.innerHTML = '<option value="">Loading matches from Challengermode…</option>';
+	matchSelect.disabled = true;
+
 	document.getElementById('schedule-modal').style.display = 'flex';
+
+	try {
+		const res = await Dot.API.get(`/api/tournaments/${tournamentId}/matches`);
+		currentMatches = res.data || [];
+		matchSelect.disabled = false;
+		matchSelect.innerHTML = '<option value="">Select a match…</option>';
+
+		currentMatches.forEach(m => {
+			const opt = document.createElement('option');
+			opt.value = m.matchId;
+			opt.textContent = `Round ${m.round}: ${m.player1Name} vs ${m.player2Name} (${m.matchId.slice(0, 8)}…)`;
+			if (schedule && schedule.matchId && schedule.matchId.toLowerCase() === m.matchId.toLowerCase()) {
+				opt.selected = true;
+			}
+			matchSelect.appendChild(opt);
+		});
+
+		if (hint) hint.textContent = `${currentMatches.length} matches loaded from Challengermode`;
+
+		if (schedule && schedule.matchId) {
+			const found = currentMatches.some(m => m.matchId.toLowerCase() === schedule.matchId.toLowerCase());
+			if (!found) {
+				manualGroup.style.display = 'block';
+				selectorGroup.style.display = 'none';
+			}
+		}
+	} catch (err) {
+		console.warn('Failed to load matches for selector:', err);
+		matchSelect.disabled = false;
+		matchSelect.innerHTML = '<option value="">Matches unavailable</option>';
+		if (hint) hint.textContent = 'Challengermode unavailable — enter UUID manually';
+		manualGroup.style.display = 'block';
+		selectorGroup.style.display = 'none';
+	}
+}
+
+function onMatchSelectDropdownChange() {
+	const sel = document.getElementById('schedule-match-select');
+	const matchId = sel ? sel.value : '';
+	const matchIdInput = document.getElementById('schedule-match-id');
+	if (matchIdInput) matchIdInput.value = matchId;
+
+	const selectedMatch = currentMatches.find(m => m.matchId === matchId);
+	const teamsContainer = document.getElementById('schedule-teams-container');
+	const teamsDisplay = document.getElementById('schedule-teams-display');
+
+	if (selectedMatch && selectedMatch.player1Name && selectedMatch.player2Name) {
+		teamsDisplay.textContent = `${selectedMatch.player1Name} vs ${selectedMatch.player2Name}`;
+		teamsContainer.style.display = 'block';
+		if (!editingScheduleId && selectedMatch.scheduledTime) {
+			const d = new Date(selectedMatch.scheduledTime);
+			if (!isNaN(d.getTime()) && d.getFullYear() <= 2090) {
+				d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+				const timeInput = document.getElementById('schedule-time');
+				if (timeInput && !timeInput.value) {
+					timeInput.value = d.toISOString().slice(0, 16);
+				}
+			}
+		}
+	} else if (!editingScheduleId) {
+		teamsContainer.style.display = 'none';
+	}
+}
+
+function toggleManualMatchInput() {
+	const manualGroup = document.getElementById('manual-match-group');
+	const selectorGroup = document.getElementById('match-selector-group');
+	if (manualGroup.style.display === 'none') {
+		manualGroup.style.display = 'block';
+		selectorGroup.style.display = 'none';
+	} else {
+		manualGroup.style.display = 'none';
+		selectorGroup.style.display = 'block';
+	}
 }
 
 function closeScheduleModal() {
@@ -1555,7 +1873,12 @@ function closeScheduleModal() {
 async function saveSchedule(event) {
 	event.preventDefault();
 
-	const matchId = document.getElementById('schedule-match-id').value;
+	let matchId = document.getElementById('schedule-match-id').value.trim();
+	const selectEl = document.getElementById('schedule-match-select');
+	if (!matchId && selectEl && selectEl.value) {
+		matchId = selectEl.value.trim();
+	}
+
 	const scheduledTime = document.getElementById('schedule-time').value;
 	const timezone = document.getElementById('schedule-timezone').value.trim();
 
@@ -1580,7 +1903,7 @@ async function saveSchedule(event) {
 
 	} catch (error) {
 		console.error('Failed to save schedule:', error);
-		const errorMsg = error.response?.data?.error || 'Failed to save schedule';
+		const errorMsg = error.response?.data?.error || error.message || 'Failed to save schedule';
 		Dot.Toast.error(errorMsg);
 	}
 }
@@ -1602,17 +1925,25 @@ async function deleteSchedule(id) {
 	);
 }
 
-// Update render functions to include action buttons
-const originalRenderParticipants = renderParticipants;
+// Update render functions to include action buttons, readiness and dual timezone
 renderParticipants = function(participants) {
 	const tbody = document.getElementById('participants-body');
 
 	if (!participants.length) {
-		tbody.innerHTML = `<tr><td colspan="7" class="empty-state"><div class="empty-state-text">No participants enrolled</div></td></tr>`;
+		tbody.innerHTML = `<tr><td colspan="8" class="empty-state"><div class="empty-state-text">No participants enrolled</div></td></tr>`;
 		return;
 	}
 
-	tbody.innerHTML = participants.map(p => `
+	tbody.innerHTML = participants.map(p => {
+		const readiness = window.DotHelpers ? DotHelpers.checkTeamReadiness(p) : { ready: true, missing: [] };
+		let readinessBadge = '';
+		if (readiness.ready) {
+			readinessBadge = '<span class="badge badge-success" title="Roster complete">Ready</span>';
+		} else {
+			readinessBadge = `<span class="badge badge-warning" title="Missing: ${escapeHtml(readiness.missing.join(', '))}">Missing ${escapeHtml(readiness.missing.join(', '))}</span>`;
+		}
+
+		return `
 		<tr>
 			<td><strong>${escapeHtml(p.team)}</strong></td>
 			<td>${escapeHtml(p.name)}</td>
@@ -1620,6 +1951,7 @@ renderParticipants = function(participants) {
 			<td>${p.discordUsername ? escapeHtml(p.discordUsername) : '<span style="color:var(--text-secondary)">—</span>'}</td>
 			<td>${p.challongeId || '<span style="color:var(--text-secondary)">—</span>'}</td>
 			<td><span class="badge badge-${p.verified ? 'success' : 'warning'}">${p.verified ? 'Verified' : 'Unverified'}</span></td>
+			<td>${readinessBadge}</td>
 			<td class="actions-col">
 				<button class="action-btn edit" onclick='openParticipantModal(${JSON.stringify(p)})' title="Edit">
 					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
@@ -1629,10 +1961,10 @@ renderParticipants = function(participants) {
 				</button>
 			</td>
 		</tr>
-	`).join('');
+	`;
+	}).join('');
 };
 
-const originalRenderSchedules = renderSchedules;
 renderSchedules = function(schedules) {
 	const tbody = document.getElementById('schedules-body');
 
@@ -1642,27 +1974,29 @@ renderSchedules = function(schedules) {
 	}
 
 	tbody.innerHTML = schedules.map(s => {
-		// Format teams display
-		const teams = `${s.player1Name} vs ${s.player2Name}`;
+		const teams = `${escapeHtml(s.player1Name || 'TBD')} vs ${escapeHtml(s.player2Name || 'TBD')}`;
+		const tzPair = window.DotHelpers
+			? DotHelpers.formatDualTimezone(s.scheduledTime, currentViewTz, 'UTC')
+			: { isUnscheduled: false, mainFormatted: Dot.Utils.formatScheduledTime(s.scheduledTime), altFormatted: '' };
 
-		const formattedDate = Dot.Utils.formatScheduledTime(s.scheduledTime);
+		const timeCell = tzPair.isUnscheduled
+			? '<span style="color:var(--text-secondary)">Not set</span>'
+			: `<div class="tz-pair"><span class="tz-main">${escapeHtml(tzPair.mainFormatted)}</span><span class="tz-alt">${escapeHtml(tzPair.altFormatted)}</span></div>`;
 
-		// Format notified status
 		const notifiedDisplay = s.notified
 			? '<span class="text-success">Yes</span>'
 			: '<span class="text-secondary">No</span>';
 
-		// Build thread link (only if thread exists)
 		const threadCell = s.threadId && s.guildId
-			? `<a href="https://discord.com/channels/${s.guildId}/${s.threadId}" target="_blank" class="thread-link">${s.threadId}</a>`
+			? `<a href="https://discord.com/channels/${s.guildId}/${s.threadId}" target="_blank" class="thread-link">${escapeHtml(s.threadId)}</a>`
 			: '<span style="color:var(--text-secondary)">—</span>';
 
 		return `
 			<tr>
-				<td><strong>#${s.matchId}</strong></td>
-				<td>Round ${s.round || '?'}</td>
+				<td><strong>#${escapeHtml(s.matchId)}</strong></td>
+				<td>Round ${escapeHtml(String(s.round || '?'))}</td>
 				<td>${teams}</td>
-				<td>${formattedDate}</td>
+				<td>${timeCell}</td>
 				<td>${threadCell}</td>
 				<td>${notifiedDisplay}</td>
 				<td class="actions-col">
@@ -1677,6 +2011,29 @@ renderSchedules = function(schedules) {
 		`;
 	}).join('');
 };
+
+function exportSchedulesIcs() {
+	if (!currentSchedules || currentSchedules.length === 0) {
+		Dot.Toast.error('No schedules available to export.');
+		return;
+	}
+	if (!window.DotHelpers || !DotHelpers.generateIcsCalendar) {
+		Dot.Toast.error('Calendar helper is not available.');
+		return;
+	}
+	const tournamentName = (currentTournamentData && currentTournamentData.name) || tournamentId;
+	const ics = DotHelpers.generateIcsCalendar(currentSchedules, tournamentName);
+	const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8;' });
+	const url = URL.createObjectURL(blob);
+	const a = document.createElement('a');
+	a.href = url;
+	a.download = `${tournamentName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-schedules.ics`;
+	document.body.appendChild(a);
+	a.click();
+	document.body.removeChild(a);
+	URL.revokeObjectURL(url);
+	Dot.Toast.success('Exported schedule to .ics calendar.');
+}
 
 // ============================================
 // Start Round Functions

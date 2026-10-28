@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en-AU">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; frame-src http://localhost:* http://127.0.0.1:*; ">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src http://127.0.0.1:* http://localhost:*;">
   <title>MLBB Tournament Bot</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -11,29 +11,99 @@
   <div id="app">
     <div id="config-screen" class="screen">
       <header>
-        <h1>MLBB Tournament Bot - Setup</h1>
-        <button id="back-from-config-btn" class="hidden">← Back</button>
+        <h1>MLBB Tournament Bot</h1>
+        <button id="back-from-config-btn" class="hidden" type="button">Back to dashboard</button>
       </header>
-      <form id="config-form" autocomplete="off" onsubmit="return false;">
-        <h2>Discord Configuration</h2>
-        <label>Bot Token: <input type="password" id="discord-token" required></label>
+      <p id="version-line" class="hint"></p>
+      <div id="storage-warning" class="warning hidden" role="status"></div>
+      <nav class="step-nav" aria-label="Setup steps" id="step-nav"></nav>
+      <div id="status-region" role="status" aria-live="polite"></div>
 
-        <h2>Challonge Configuration</h2>
-        <label>Username: <input type="text" id="challonge-username" required></label>
-        <label>API Key: <input type="password" id="challonge-token" required></label>
+      <section class="wizard-step" data-step="discord">
+        <h2>Discord connection</h2>
+        <p class="hint">Paste the bot token from the Discord developer portal. It is stored in the operating system key store when that is available, and it is not written into the settings file.</p>
+        <label>Bot token
+          <input type="password" id="discord-token" autocomplete="new-password" spellcheck="false">
+        </label>
+        <p id="discord-token-state" class="hint"></p>
+        <p class="hint">Enable the Server Members and Message Content intents before inviting the bot.</p>
+      </section>
 
-        <h2>Bot Settings</h2>
-        <label>Command Prefix: <input type="text" id="bot-prefix" value="!" required></label>
-        <label>TO Role Name: <input type="text" id="bot-to-role" value="Organizer" required></label>
+      <section class="wizard-step hidden" data-step="server">
+        <h2>Server selection</h2>
+        <p class="hint">The bot creates the organiser role when it joins a server. Use the same role name here and in Discord.</p>
+        <label>Command prefix <input type="text" id="bot-prefix" value="!" maxlength="10" required></label>
+        <label>Organiser role name <input type="text" id="bot-to-role" value="Organizer" required></label>
+        <label>Participant role name <input type="text" id="participant-role" value="Participant"></label>
+        <p class="hint">Channel and permission checks run after the bot is online. A saved token is not the same as a connected server.</p>
+      </section>
 
-        <h2>Web Settings</h2>
-        <label>Access Password (for network access): <input type="text" id="web-password" placeholder="Leave empty for no password"></label>
+      <section class="wizard-step hidden" data-step="challengermode">
+        <h2>Challengermode access</h2>
+        <p class="hint">Generate an application refresh key in the Challengermode developer dashboard. The bot only reads tournament data. Scores and registration stay on Challengermode.</p>
+        <label>Application refresh key
+          <input type="password" id="challengermode-refresh-key" autocomplete="new-password" spellcheck="false">
+        </label>
+        <p id="challengermode-state" class="hint"></p>
+      </section>
 
+      <section class="wizard-step hidden" data-step="email">
+        <h2>Email setup</h2>
+        <p class="hint">Verification codes are sent with a Google OAuth client. Leave the fields blank to keep the saved credentials. An empty test does not mean a code was sent.</p>
+        <label>Google client ID <input type="password" id="google-client-id" autocomplete="new-password"></label>
+        <label>Google client secret <input type="password" id="google-client-secret" autocomplete="new-password"></label>
+        <label>Google refresh token <input type="password" id="google-refresh-token" autocomplete="new-password"></label>
+        <label>Token URI <input type="text" id="google-token-uri" value="https://oauth2.googleapis.com/token"></label>
+        <label>Test recipient <input type="email" id="email-test-to" placeholder="organiser@example.com"></label>
         <div class="buttons">
-          <button type="submit">Save & Start Bot</button>
-          <button type="button" id="load-config">Load Config</button>
+          <button type="button" id="save-email-btn">Save email credentials</button>
+          <button type="button" id="test-email-btn">Send test email</button>
         </div>
-      </form>
+        <p id="email-result" class="hint"></p>
+      </section>
+
+      <section class="wizard-step hidden" data-step="storage">
+        <h2>Storage</h2>
+        <label>Database
+          <select id="database-type">
+            <option value="sqlite">SQLite on this computer</option>
+            <option value="postgresql">PostgreSQL server</option>
+          </select>
+        </label>
+        <label>SQLite file <input type="text" id="database-path"></label>
+        <label>PostgreSQL URL <input type="text" id="database-url" autocomplete="off" spellcheck="false" placeholder="postgresql://user:password@localhost:5432/mlbb"></label>
+        <p class="hint">SQLite is the desktop default. Only one app instance can use the file. PostgreSQL backups are not copied by the desktop app; use that server's own backup tool.</p>
+        <div class="buttons">
+          <button type="button" id="create-backup-btn">Back up now</button>
+        </div>
+        <ul id="backup-list" class="check-list"></ul>
+      </section>
+
+      <section class="wizard-step hidden" data-step="dashboard">
+        <h2>Dashboard access</h2>
+        <p class="hint">The dashboard listens on this computer by default. Opening it from the app creates a one-time local session. Other devices need network access and a password.</p>
+        <label>Port <input type="number" id="web-port" min="1" max="65535" value="3000"></label>
+        <label><input type="checkbox" id="web-auto" checked> Find the next free port if this one is busy</label>
+        <label><input type="checkbox" id="web-network"> Allow other devices on the network to open the dashboard</label>
+        <label>Access password <input type="password" id="web-password" autocomplete="new-password"></label>
+        <p id="password-state" class="hint"></p>
+        <p id="network-warning" class="warning hidden">Network access requires a password. Loopback is not treated as a login, including when a reverse proxy connects locally.</p>
+      </section>
+
+      <section class="wizard-step hidden" data-step="review">
+        <h2>Checklist</h2>
+        <p class="hint">A failed step names the recovery action. Items that need the running bot stay "not checked" or "not available" until that check can actually run.</p>
+        <ul id="check-list" class="check-list"></ul>
+        <div class="buttons">
+          <button type="button" id="recheck-btn">Check again</button>
+          <button type="button" id="start-from-wizard">Save and start bot</button>
+        </div>
+      </section>
+
+      <div class="buttons">
+        <button type="button" id="wizard-back">Back</button>
+        <button type="button" id="wizard-next">Continue</button>
+      </div>
     </div>
 
     <div id="dashboard-screen" class="screen hidden">
@@ -42,46 +112,54 @@
         <div class="status-indicator">
           <span id="status-dot"></span>
           <span id="status-text">Stopped</span>
-          <button id="settings-btn" title="Settings">⚙</button>
-          <button id="start-btn" class="hidden" title="Start Bot">▶</button>
-          <button id="stop-btn" title="Stop Bot">⏹</button>
+          <button id="settings-btn" type="button">Setup</button>
+          <button id="start-btn" class="hidden" type="button">Start</button>
+          <button id="stop-btn" type="button">Stop</button>
         </div>
       </header>
 
       <section id="network-info">
-        <h3>Network Access</h3>
+        <h3>Dashboard</h3>
         <div class="url-row">
-          <span>Local:</span>
-          <code id="local-url">http://localhost:3000</code>
-          <button class="copy-btn" data-target="local-url">📋 Copy</button>
+          <span>This computer:</span>
+          <code id="local-url">http://127.0.0.1:3000</code>
+          <button class="copy-btn" type="button" data-target="local-url">Copy</button>
         </div>
-        <div class="url-row">
+        <div class="url-row" id="network-row">
           <span>Network:</span>
-          <code id="network-url">http://192.168.1.105:3000</code>
-          <button class="copy-btn" data-target="network-url">📋 Copy</button>
+          <code id="network-url">hidden until network access is enabled</code>
+          <button class="copy-btn" type="button" data-target="network-url">Copy</button>
         </div>
-        <p>Other users on your network can use the Network URL</p>
+        <p id="bind-note" class="hint">Other devices cannot open the dashboard until you enable network access and set a password.</p>
+      </section>
+
+      <section id="release-info">
+        <h3>This version</h3>
+        <ul id="release-notes" class="check-list"></ul>
+        <p id="signing-note" class="hint"></p>
       </section>
 
       <section id="logs">
-        <h3>Live Logs <label><input type="checkbox" id="auto-scroll" checked> Auto-scroll</label></h3>
-        <div id="log-container"></div>
+        <h3>Live logs <label><input type="checkbox" id="auto-scroll" checked> Auto-scroll</label></h3>
+        <div id="log-container" role="log" aria-live="polite"></div>
       </section>
 
       <div class="buttons">
-        <button id="web-interface-btn">🌐 Web Interface</button>
-        <button id="export-logs-btn">📋 Export Logs</button>
+        <button id="web-interface-btn" type="button">Open dashboard</button>
+        <button id="export-logs-btn" type="button">Export logs</button>
+        <button id="support-bundle-btn" type="button">Save support notes</button>
       </div>
+      <p id="dashboard-message" class="hint" role="status"></p>
     </div>
-    <div id="web-interface-screen" class="screen hidden" style="padding: 0; display: flex; flex-direction: column;">
-      <header style="margin-bottom: 0; padding: 10px 20px; border-bottom: 1px solid #45475a; background: #1e1e2e;">
-        <h1 style="font-size: 1.2em;">Web Interface</h1>
-        <button id="back-to-dashboard-btn" style="padding: 5px 15px;">← Back to Dashboard</button>
+
+    <div id="web-interface-screen" class="screen hidden">
+      <header>
+        <h1>Dashboard</h1>
+        <button id="back-to-dashboard-btn" type="button">Back</button>
       </header>
-      <iframe id="web-iframe" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads allow-popups" style="flex: 1; border: none; width: 100%; height: 100%; background: white;"></iframe>
+      <iframe id="web-iframe" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads allow-popups" title="Tournament dashboard"></iframe>
     </div>
   </div>
-
   <script type="module" src="renderer.js"></script>
 </body>
 </html>

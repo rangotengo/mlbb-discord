@@ -4,40 +4,82 @@
 	</div>
 
 	<% if (locals.success) { %>
-		<div class="alert alert-success">Configuration saved successfully.</div>
+		<div class="alert alert-success" role="status">Configuration saved successfully.</div>
 	<% } %>
-	
+
 	<% if (locals.error) { %>
-		<div class="alert alert-danger"><%= error %></div>
+		<div class="alert alert-danger" role="alert"><%= error %></div>
 	<% } %>
 
 	<% if (locals.serverRestart) { %>
-		<div class="alert alert-warning">
+		<div class="alert alert-warning" role="alert">
 			<strong>Server restart required:</strong> Changes to <code>SQLITE_DB</code> require a full application restart to take effect. Please restart the backend process entirely.
 		</div>
 	<% } else if (locals.botRestart) { %>
-		<div class="alert alert-warning">
-			<strong>Bot restart required:</strong> Changes to Prefix or Role require the bot client to restart to reflect these properly. Please restart the application.
+		<div class="alert alert-warning" role="alert">
+			<strong>Bot restart required:</strong> Changes to credentials, Prefix or Role require the bot client to restart to reflect these properly. Please restart the application.
 		</div>
 	<% } %>
+
+	<%
+		// Accept both the field-descriptor shape agreed with the backend owner:
+		//   fields: [{key,label,value,configured,secret,restart,description?}]
+		// and the legacy configData: {KEY: value} map. Secrets never carry a value;
+		// in the legacy shape we treat any TOKEN/KEY/PASSWORD/SECRET key as a secret
+		// and never echo its current value back into the form (guide 6).
+		const hasFields = Array.isArray(locals.fields) && locals.fields.length > 0;
+		const fields = hasFields ? locals.fields : Object.entries(locals.configData || {}).map(([key, value]) => ({
+			key,
+			label: key,
+			value: /TOKEN|KEY|PASSWORD|SECRET/.test(key) ? '' : value,
+			configured: Boolean(value),
+			secret: /TOKEN|KEY|PASSWORD|SECRET/.test(key),
+			restart: key === 'SQLITE_DB' ? 'server' : (['DOT_DEFAULT_PREFIX', 'DOT_DEFAULT_TO_ROLE', 'CHALLENGERMODE_REFRESH_KEY'].includes(key) ? 'bot' : 'none'),
+			description: undefined
+		}));
+	%>
 
 	<div class="card">
 		<div class="card-header">
 			<h3 class="card-title">Environment Variables</h3>
-            <p class="text-secondary" style="font-size: 0.85rem; margin-top: 0.25rem;">
-                Manage your environment variables below. Note that DISCORD_TOKEN is hidden for security.
-            </p>
+			<p class="text-secondary config-subtitle">
+				Secret values are never displayed. Use the replace field to set a new secret, or leave it blank to keep the stored value.
+			</p>
 		</div>
 		<form method="POST" action="/config" class="form" style="padding: 1.25rem;">
+			<input type="hidden" name="_csrf" value="<%= locals.csrfToken || '' %>">
 			<div class="form-grid">
-				<% Object.entries(configData).forEach(([key, value]) => { %>
+				<% fields.forEach(function (field) { %>
 					<div class="form-group">
-						<label class="form-label" for="<%= key %>"><%= key %></label>
-						<input type="text" id="<%= key %>" name="<%= key %>" class="form-input" value="<%= value %>">
+						<label class="form-label" for="<%= field.key %>"><%= field.label || field.key %></label>
+						<% if (field.secret) { %>
+							<div class="secret-status <%= field.configured ? 'secret-configured' : 'secret-missing' %>">
+								<span aria-hidden="true"><%= field.configured ? '●' : '○' %></span>
+								<span><%= field.configured ? 'Configured' : 'Not set' %></span>
+							</div>
+							<input type="password"
+								id="<%= field.key %>"
+								name="<%= field.key %>"
+								class="form-input"
+								value=""
+								autocomplete="new-password"
+								placeholder="<%= field.configured ? 'Leave blank to keep the current value' : 'Enter a value to configure' %>"
+								aria-describedby="<%= field.key %>-help">
+							<p class="form-help" id="<%= field.key %>-help">
+								<%= field.configured ? 'Secret is stored and will not be replaced unless you type a new value.' : 'No value is stored for this setting.' %>
+								<% if (field.restart === 'bot') { %> Saving a new value requires a bot restart. <% } %>
+								<% if (field.restart === 'server') { %> Saving a new value requires a full server restart. <% } %>
+							</p>
+						<% } else { %>
+							<input type="text" id="<%= field.key %>" name="<%= field.key %>" class="form-input" value="<%= field.value || '' %>">
+							<% if (field.restart === 'bot') { %><p class="form-help">Saving a new value requires a bot restart.</p><% } %>
+							<% if (field.restart === 'server') { %><p class="form-help">Saving a new value requires a full server restart.</p><% } %>
+							<% if (field.description) { %><p class="form-help"><%= field.description %></p><% } %>
+						<% } %>
 					</div>
-				<% }); %>
+				<% }) %>
 			</div>
-			
+
 			<div class="form-actions" style="margin-top: 1.5rem;">
 				<button type="submit" class="btn btn-primary">Save Configuration</button>
 			</div>
@@ -46,42 +88,47 @@
 </div>
 
 <style>
-	.config-page { 
-		max-width: 800px; 
-		margin: 0 auto; 
+	.config-page {
+		max-width: 800px;
+		margin: 0 auto;
 	}
-	
+
 	.page-header {
 		margin-bottom: 2rem;
 	}
 
-	.form-grid { 
-		display: grid; 
-		gap: 1.25rem; 
+	.config-subtitle {
+		font-size: 0.85rem;
+		margin-top: 0.25rem;
 	}
 
-	.form-group { 
-		display: flex; 
-		flex-direction: column; 
-		gap: 0.5rem; 
+	.form-grid {
+		display: grid;
+		gap: 1.25rem;
 	}
 
-	.form-label { 
-		font-size: 0.85rem; 
-		font-weight: 600; 
-		color: var(--text-secondary); 
+	.form-group {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.form-label {
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: var(--text-secondary);
 		letter-spacing: 0.02em;
 	}
 
-	.form-input { 
-		padding: 0.65rem; 
-		border-radius: var(--radius-sm); 
-		border: 1px solid var(--border); 
+	.form-input {
+		padding: 0.65rem;
+		border-radius: var(--radius-sm);
+		border: 1px solid var(--border);
 		background: var(--bg-tertiary);
 		color: var(--text-primary);
 		font-family: var(--font-mono, monospace);
 		font-size: 0.9rem;
-		transition: border-color var(--transition-short);
+		transition: border-color var(--ease-fast);
 	}
 
 	.form-input:focus {
@@ -89,23 +136,52 @@
 		border-color: var(--accent);
 	}
 
-	.alert { 
-		padding: 1rem; 
-		border-radius: var(--radius-md); 
-		margin-bottom: 1.5rem; 
+	.form-help {
+		font-size: 12.5px;
+		color: var(--text-secondary);
+		margin: 0;
+	}
+
+	.secret-status {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		align-self: flex-start;
+		padding: 4px 12px;
+		border-radius: var(--radius-full);
+		font-size: 12.5px;
+		font-weight: 600;
+	}
+
+	.secret-configured {
+		background: var(--success-subtle, rgba(52, 211, 153, 0.08));
+		border: 1px solid var(--success-border, rgba(52, 211, 153, 0.25));
+		color: var(--success, #34d399);
+	}
+
+	.secret-missing {
+		background: var(--warning-subtle, rgba(251, 191, 36, 0.08));
+		border: 1px solid var(--warning-border, rgba(251, 191, 36, 0.25));
+		color: var(--warning, #fbbf24);
+	}
+
+	.alert {
+		padding: 1rem;
+		border-radius: var(--radius-md);
+		margin-bottom: 1.5rem;
 		font-weight: 500;
 	}
 
-	.alert-success { 
-		background: rgba(52, 211, 153, 0.1); 
-		border: 1px solid rgba(52, 211, 153, 0.3); 
-		color: #34d399; 
+	.alert-success {
+		background: rgba(52, 211, 153, 0.1);
+		border: 1px solid rgba(52, 211, 153, 0.3);
+		color: #34d399;
 	}
 
-	.alert-danger { 
-		background: rgba(248, 113, 113, 0.1); 
-		border: 1px solid rgba(248, 113, 113, 0.3); 
-		color: #f87171; 
+	.alert-danger {
+		background: rgba(248, 113, 113, 0.1);
+		border: 1px solid rgba(248, 113, 113, 0.3);
+		color: #f87171;
 	}
 
 	.alert-warning {
@@ -113,17 +189,68 @@
 		border: 1px solid rgba(251, 191, 36, 0.3);
 		color: #fbbf24;
 	}
-	
+
 	.text-secondary {
 		color: var(--text-secondary);
 	}
 </style>
 
 <script>
-	// Remove query parameters from the URL so that "Restart required" or "Success" 
+	// Remove query parameters from the URL so that "Restart required" or "Success"
 	// alerts don't persist if the user refreshes the page manually after a restart.
 	if (window.history.replaceState && window.location.search) {
 		const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
 		window.history.replaceState({ path: newUrl }, "", newUrl);
 	}
+
+	// Never submit an empty secret field: a blank value would otherwise be sent as
+	// an update and could clear the stored secret on routes that treat presence of
+	// the key as a change. Empty secret inputs are dropped from the payload
+	// entirely, so "leave blank to keep" is truthful (guide 6).
+	// Also ensure X-CSRF-Token is presented on submit.
+	document.querySelectorAll('form[action="/config"]').forEach(function (form) {
+		form.addEventListener('submit', async function (event) {
+			event.preventDefault();
+			const token = (window.Dot && Dot.API.readCsrfToken()) || (form.querySelector('input[name=\"_csrf\"]') ? form.querySelector('input[name=\"_csrf\"]').value : '');
+			const formData = new FormData(form);
+			const params = new URLSearchParams();
+			for (const [key, value] of formData.entries()) {
+				const input = form.querySelector('[name=\"' + key + '\"]');
+				if (input && input.type === 'password' && !value) {
+					continue; // omit blank secrets
+				}
+				params.append(key, value);
+			}
+
+			try {
+				const res = await fetch('/config', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/x-www-form-urlencoded',
+						'X-CSRF-Token': token
+					},
+					body: params.toString()
+				});
+
+				if (res.redirected) {
+					window.location.href = res.url;
+				} else if (res.ok) {
+					window.location.reload();
+				} else {
+					const text = await res.text();
+					if (window.Dot && Dot.Toast) {
+						Dot.Toast.error('Failed to save configuration: ' + (res.statusText || 'Error ' + res.status));
+					} else {
+						alert('Failed to save configuration: ' + res.status);
+					}
+				}
+			} catch (err) {
+				if (window.Dot && Dot.Toast) {
+					Dot.Toast.error('Network error saving configuration: ' + err.message);
+				} else {
+					alert('Network error saving configuration: ' + err.message);
+				}
+			}
+		});
+	});
 </script>
