@@ -1,0 +1,943 @@
+[
+  {
+    "columns": [
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": true,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "tournamentId",
+        "type": "character varying"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "challongeTournamentId",
+        "type": "character varying"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "name",
+        "type": "character varying"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "description",
+        "type": "text"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "20",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "owningDiscordServer",
+        "type": "character varying"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "format",
+        "type": "enum",
+        "default": "'swiss'",
+        "enum": [
+          "single elimination",
+          "double elimination",
+          "round robin",
+          "swiss",
+          "free for all"
+        ]
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "hosts",
+        "type": "json",
+        "default": "'[]'"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "publicChannels",
+        "type": "json",
+        "default": "'[]'"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "privateChannels",
+        "type": "json",
+        "default": "'[]'"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "status",
+        "type": "enum",
+        "default": "'preparing'",
+        "enum": [
+          "preparing",
+          "in progress",
+          "complete"
+        ]
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "participantLimit",
+        "type": "integer",
+        "default": "'0'"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "autoPushScores",
+        "type": "boolean",
+        "default": "true"
+      },
+      {
+        "isNullable": true,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "scoreReviewChannelId",
+        "type": "character varying"
+      },
+      {
+        "isNullable": true,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "100",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "participantRoleName",
+        "type": "character varying"
+      },
+      {
+        "isNullable": true,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "20",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "participantRoleId",
+        "type": "character varying"
+      },
+      {
+        "isNullable": true,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "activeRound",
+        "type": "integer"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "checkInDisabled",
+        "type": "boolean",
+        "default": "false"
+      },
+      {
+        "isNullable": true,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "lastSyncAttempt",
+        "type": "timestamp with time zone"
+      },
+      {
+        "isNullable": true,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "lastSyncSuccess",
+        "type": "timestamp with time zone"
+      },
+      {
+        "isNullable": true,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "32",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "syncSource",
+        "type": "character varying"
+      }
+    ],
+    "indices": [],
+    "foreignKeys": [],
+    "uniques": [],
+    "checks": [],
+    "exclusions": [],
+    "justCreated": false,
+    "withoutRowid": false,
+    "name": "challonge_tournament"
+  },
+  {
+    "columns": [
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": true,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "tournamentId",
+        "type": "character varying"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": true,
+        "isUnique": false,
+        "isArray": false,
+        "length": "20",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "discordId",
+        "type": "character varying"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "hasBye",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
+    "indices": [],
+    "foreignKeys": [
+      {
+        "columnNames": [
+          "tournamentId"
+        ],
+        "referencedColumnNames": [
+          "tournamentId"
+        ],
+        "name": "FK_99cba5cb409eb7e657295b474ba",
+        "referencedTableName": "challonge_tournament",
+        "onDelete": "CASCADE",
+        "onUpdate": "NO ACTION"
+      }
+    ],
+    "uniques": [],
+    "checks": [],
+    "exclusions": [],
+    "justCreated": false,
+    "withoutRowid": false,
+    "name": "participant"
+  },
+  {
+    "columns": [
+      {
+        "isNullable": false,
+        "isGenerated": true,
+        "isPrimary": true,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "id",
+        "type": "integer",
+        "generationStrategy": "increment"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "end",
+        "type": "timestamp with time zone"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "20",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "channelId",
+        "type": "character varying"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "20",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "messageId",
+        "type": "character varying"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "finalMessage",
+        "type": "text"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "cronIntervalSeconds",
+        "type": "integer"
+      },
+      {
+        "isNullable": true,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "tournamentId",
+        "type": "character varying"
+      }
+    ],
+    "indices": [],
+    "foreignKeys": [
+      {
+        "columnNames": [
+          "tournamentId"
+        ],
+        "referencedColumnNames": [
+          "tournamentId"
+        ],
+        "name": "FK_243365eb718c2398298eff39a87",
+        "referencedTableName": "challonge_tournament",
+        "onDelete": "CASCADE",
+        "onUpdate": "NO ACTION"
+      }
+    ],
+    "uniques": [],
+    "checks": [],
+    "exclusions": [],
+    "justCreated": false,
+    "withoutRowid": false,
+    "name": "countdown"
+  },
+  {
+    "columns": [
+      {
+        "isNullable": false,
+        "isGenerated": true,
+        "isPrimary": true,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "id",
+        "type": "integer",
+        "generationStrategy": "increment"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "tournamentId",
+        "type": "character varying"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "email",
+        "type": "character varying"
+      },
+      {
+        "isNullable": true,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "name",
+        "type": "character varying"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "team",
+        "type": "character varying"
+      },
+      {
+        "isNullable": true,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "discordUsername",
+        "type": "character varying"
+      },
+      {
+        "isNullable": true,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "otp",
+        "type": "integer"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "emailSent",
+        "type": "integer",
+        "default": "'0'"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "verified",
+        "type": "boolean",
+        "default": "false"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "identityVerified",
+        "type": "boolean",
+        "default": "false"
+      },
+      {
+        "isNullable": true,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "identityVerifiedAt",
+        "type": "timestamp with time zone"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "accessPending",
+        "type": "boolean",
+        "default": "false"
+      },
+      {
+        "isNullable": true,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "32",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "identityVerifiedBy",
+        "type": "character varying"
+      },
+      {
+        "isNullable": true,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "discordId",
+        "type": "character varying"
+      },
+      {
+        "isNullable": true,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "64",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "challongeId",
+        "type": "character varying"
+      }
+    ],
+    "indices": [],
+    "foreignKeys": [
+      {
+        "columnNames": [
+          "tournamentId"
+        ],
+        "referencedColumnNames": [
+          "tournamentId"
+        ],
+        "name": "FK_589d5bb6c2603f0dee24926d465",
+        "referencedTableName": "challonge_tournament",
+        "onDelete": "CASCADE",
+        "onUpdate": "NO ACTION"
+      }
+    ],
+    "uniques": [],
+    "checks": [],
+    "exclusions": [],
+    "justCreated": false,
+    "withoutRowid": false,
+    "name": "enrolled_player"
+  },
+  {
+    "columns": [
+      {
+        "isNullable": false,
+        "isGenerated": true,
+        "isPrimary": true,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "id",
+        "type": "integer",
+        "generationStrategy": "increment"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "64",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "matchId",
+        "type": "character varying"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "50",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "tournamentId",
+        "type": "character varying"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "scheduledTime",
+        "type": "timestamp with time zone"
+      },
+      {
+        "isNullable": true,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "roundNumber",
+        "type": "integer"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "notified",
+        "type": "boolean",
+        "default": "false"
+      },
+      {
+        "isNullable": true,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "20",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "threadId",
+        "type": "character varying"
+      },
+      {
+        "isNullable": true,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "20",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "channelId",
+        "type": "character varying"
+      }
+    ],
+    "indices": [],
+    "foreignKeys": [
+      {
+        "columnNames": [
+          "tournamentId"
+        ],
+        "referencedColumnNames": [
+          "tournamentId"
+        ],
+        "name": "FK_4c988c0c9dc007154d76eeb7e15",
+        "referencedTableName": "challonge_tournament",
+        "onDelete": "CASCADE",
+        "onUpdate": "NO ACTION"
+      }
+    ],
+    "uniques": [],
+    "checks": [],
+    "exclusions": [],
+    "justCreated": false,
+    "withoutRowid": false,
+    "name": "match_schedule"
+  },
+  {
+    "columns": [
+      {
+        "isNullable": false,
+        "isGenerated": true,
+        "isPrimary": true,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "id",
+        "type": "integer",
+        "generationStrategy": "increment"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "20",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "discordId",
+        "type": "character varying"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "20",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "guildId",
+        "type": "character varying"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "email",
+        "type": "character varying"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "64",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "digest",
+        "type": "character varying"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "expiresAt",
+        "type": "timestamp without time zone"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "resendEligibleAt",
+        "type": "timestamp without time zone"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "attempts",
+        "type": "integer",
+        "default": "'0'"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "sends",
+        "type": "integer",
+        "default": "'0'"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "deliveryAttempts",
+        "type": "integer",
+        "default": "'0'"
+      },
+      {
+        "isNullable": false,
+        "isGenerated": false,
+        "isPrimary": false,
+        "isUnique": false,
+        "isArray": false,
+        "length": "",
+        "zerofill": false,
+        "unsigned": false,
+        "name": "consumed",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
+    "indices": [
+      {
+        "columnNames": [
+          "discordId",
+          "guildId",
+          "email"
+        ],
+        "name": "IDX_57162f320d951f8c8c51bc4eaf",
+        "isUnique": true,
+        "isSpatial": false,
+        "isConcurrent": false,
+        "isFulltext": false,
+        "isNullFiltered": false,
+        "where": ""
+      }
+    ],
+    "foreignKeys": [],
+    "uniques": [],
+    "checks": [],
+    "exclusions": [],
+    "justCreated": false,
+    "withoutRowid": false,
+    "name": "verification_challenge"
+  }
+]

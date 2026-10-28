@@ -40,13 +40,6 @@ const command: CommandDefinition = {
 		assertTournamentNotComplete(tournament.name, tournament.status);
 		// Update DB first because it performs an important check that might throw
 		await support.database.updateTournament(id, name, desc);
-		try {
-			await support.challonge.updateTournament(id, name, desc);
-		} catch (error) {
-			logger.error(`Failed to update Challonge tournament ${id} after DB update:`, error);
-			await msg.reply(`Database updated but Challonge update failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-			return;
-		}
 		logger.verbose(
 			JSON.stringify({
 				channel: msg.channelId,
@@ -59,7 +52,7 @@ const command: CommandDefinition = {
 				event: "success"
 			})
 		);
-		await msg.reply(`Tournament \`${id}\` updated! It now has the name ${name} and the given description.`);
+		await msg.reply(`Tournament \`${id}\` updated locally! It now has the name ${name} and the given description. Remote settings must be changed on Challengermode; syncing will refresh these local details.`);
 	}
 };
 

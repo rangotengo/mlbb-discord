@@ -16,7 +16,7 @@ export function parseTime(timeStr: string): number {
 		const hours = parseInt(colonMatch[1], 10);
 		const minutes = parseInt(colonMatch[2], 10);
 
-		if (hours < 0 || minutes < 0 || minutes >= 60) {
+		if (!Number.isSafeInteger(hours * 60 + minutes) || minutes >= 60) {
 			throw new UserError(`Invalid time format: ${timeStr}. Minutes must be 0-59.`);
 		}
 
@@ -25,7 +25,7 @@ export function parseTime(timeStr: string): number {
 
 	// Try "mm" format (just minutes)
 	const minutesOnly = parseInt(trimmed, 10);
-	if (!isNaN(minutesOnly) && minutesOnly >= 0) {
+	if (/^\d+$/.test(trimmed) && Number.isSafeInteger(minutesOnly) && minutesOnly >= 0) {
 		return minutesOnly;
 	}
 

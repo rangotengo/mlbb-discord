@@ -7,11 +7,11 @@ import {
 	PermissionsBitField
 } from "discord.js";
 import { CommandDefinition } from "../Command";
-import { EnrolledPlayer } from "../database/orm/EnrolledPlayer";
 import { ChallongeTournament } from "../database/orm/ChallongeTournament";
 import { getLogger } from "../util/logger";
 import { isTournamentOrganizer, assignParticipantRole, getParticipantRoleName, TO_COMMAND_BLOCKED, TICKETS_CATEGORY_NAME, TICKET_CHANNEL_PREFIX } from "../util";
 import { addUserToMatchThreads } from "../util/matchThreads";
+import { matchCheckIn } from "../role/helper/verification";
 
 const logger = getLogger("command:check");
 
@@ -26,131 +26,67 @@ const command: CommandDefinition = {
 
 		if (!msg.guild) return;
 
-		// First, find the tournaments for this guild
-		const tournaments = await ChallongeTournament.find({
-			where: { owningDiscordServer: msg.guild.id }
-		});
+		const member = await msg.guild.members.fetch(msg.author.id).catch(() => null);
 
-		// Block if all tournaments have check-in disabled
-		if (tournaments.length > 0 && tournaments.every(t => t.checkInDisabled)) {
-			await msg.reply("❌ Check in is already closed. Please contact the Tournament Organizer for assistance.");
+		// Display names are suggestions only; a verified Discord ID is the
+		// sole basis for automatic identity confirmation (guide 1).
+		const matchForms = [msg.author.username.toLowerCase()];
+		if (msg.author.globalName) matchForms.push(msg.author.globalName.toLowerCase());
+		if (member?.displayName) matchForms.push(member.displayName.toLowerCase());
+
+		const match = await matchCheckIn(msg.author.id, msg.guild.id, matchForms);
+
+		if (match.kind === "returning") {
+			// Returning participant with a previously verified identity link.
+			const outcomes: string[] = [];
+			for (const player of match.players) {
+				const tournament = player.tournament ?? await ChallongeTournament.findOne({
+					where: { tournamentId: player.tournamentId }
+				});
+				if (!tournament) continue;
+
+				if (tournament.checkInDisabled) {
+					outcomes.push(`❌ **${tournament.name}**: check-in is closed. Contact the Tournament Organizer.`);
+					continue;
+				}
+
+				const hasRole = member?.roles.cache.some(role => role.name === getParticipantRoleName(tournament));
+				if (hasRole) {
+					outcomes.push(`✅ **${tournament.name}**: you are verified and have access.`);
+					continue;
+				}
+
+				const roleAssigned = member
+					? await assignParticipantRole(member, tournament, logger, support.participantRole)
+					: false;
+				if (!roleAssigned) {
+					// Identity stands; access provisioning is retried safely.
+					if (!player.accessPending) {
+						player.accessPending = true;
+						await player.save().catch((err: unknown) => logger.error("Failed to mark access pending:", err));
+					}
+					outcomes.push(`⚠️ **${tournament.name}**: identity verified; access pending. The participant role could not be assigned — ask a Tournament Organizer to retry (\`!check-in\` again after the role is fixed).`);
+					continue;
+				}
+				if (player.accessPending) {
+					player.accessPending = false;
+					await player.save().catch(() => undefined);
+				}
+				await addUserToMatchThreads(msg.guild, player, support.tournamentApi).catch(() => 0);
+				outcomes.push(`✅ **${tournament.name}**: participant access restored. Welcome back!`);
+			}
+			await msg.reply(outcomes.join("\n") || "You are verified, but your tournaments could not be loaded. Please ask a TO for help.");
 			return;
 		}
 
-		// Then, find all enrolled players for those tournaments
-		const tournamentIds = tournaments.map(t => t.tournamentId);
-
-		let enrolledPlayers: EnrolledPlayer[] = [];
-		if (tournamentIds.length > 0) {
-			for (const tournamentId of tournamentIds) {
-				const playersForTournament = await EnrolledPlayer.find({
-					where: { tournamentId },
-					relations: ["tournament"]
-				});
-				enrolledPlayers.push(...playersForTournament);
-			}
+		if (match.kind === "suggested") {
+			// Name matches exist but prove nothing. Open the ticket flow; the
+			// enrolment records are never mutated here.
+			const names = [...new Set(match.players.map(p => p.tournamentId))].join(", ");
+			logger.info(`Suggested-only check-in for ${msg.author.id}: ${names}. Ticket flow required.`);
 		}
 
-		const matchForms = [msg.author.username.toLowerCase()];
-		if (msg.author.globalName) matchForms.push(msg.author.globalName.toLowerCase());
-		// Member displayName requires fetching member if not cached, but author is user.
-		const member = await msg.guild.members.fetch(msg.author.id).catch(() => null);
-		if (member && member.displayName) matchForms.push(member.displayName.toLowerCase());
-
-		const matchedPlayer = enrolledPlayers.find(
-			p => p.discordUsername && matchForms.includes(p.discordUsername.toLowerCase())
-		);
-
-		if (matchedPlayer) {
-			// If tournament relation is not loaded, fetch it manually
-			if (!matchedPlayer.tournament) {
-				const tournament = await ChallongeTournament.findOne({
-					where: { tournamentId: matchedPlayer.tournamentId }
-				});
-				if (!tournament) {
-					logger.error(`Could not find tournament with ID ${matchedPlayer.tournamentId}`);
-					await msg.reply("An error occurred during verification. Please ask a TO for help.");
-					return;
-				}
-				matchedPlayer.tournament = tournament;
-			}
-
-			// Block if this player's tournament has check-in disabled
-			if (matchedPlayer.tournament.checkInDisabled) {
-				await msg.reply("❌ Check in is already closed. Please contact the Tournament Organizer for assistance.");
-				return;
-			}
-
-			if (matchedPlayer.verified) {
-				// Check if user has the participant role
-				const hasRole = member?.roles.cache.some(role =>
-					role.name === getParticipantRoleName(matchedPlayer.tournament)
-				);
-
-				if (!hasRole && member) {
-					const roleAssigned = await assignParticipantRole(member, matchedPlayer.tournament, logger, support.participantRole);
-					if (roleAssigned) {
-						// Also try to add to match threads in case they were missed
-						if (msg.guild) {
-							await addUserToMatchThreads(msg.guild, matchedPlayer, support.challonge);
-						}
-						await msg.reply(`Welcome back! Your participant role for **${matchedPlayer.tournament.name}** has been restored.`);
-						return;
-					}
-				}
-
-				// Try to add to match threads in case they were missed
-				if (msg.guild) {
-					await addUserToMatchThreads(msg.guild, matchedPlayer, support.challonge);
-				}
-
-				await msg.reply(`You are already verified for the tournament **${matchedPlayer.tournament.name}**.`);
-				return;
-			}
-
-			// If player has OTP set, they must use !verify command instead
-			if (matchedPlayer.otp) {
-				await msg.reply(`We found your enrollment, but you need to verify using your OTP. Please use \`!verify <your_otp>\` command in a ticket channel. Use \`!check-in\` again to create a ticket if needed.`);
-				return;
-			}
-
-			// Auto-verify based on local database match
-			// Players are verified by Discord username matching enrolled data
-			// Team roles are assigned separately, Challonge uses team names
-			try {
-				matchedPlayer.verified = true;
-				matchedPlayer.discordId = msg.author.id;
-				matchedPlayer.discordUsername = msg.author.username;
-				await matchedPlayer.save();
-
-				// Assign participant role
-				if (member) {
-					const roleAssigned = await assignParticipantRole(member, matchedPlayer.tournament, logger, support.participantRole);
-					if (!roleAssigned) {
-						logger.warn(`Failed to assign participant role to ${msg.author.tag} during check command`);
-					}
-				}
-
-				// Add user to existing match threads if verification happened after thread creation
-				if (msg.guild) {
-					const threadsAdded = await addUserToMatchThreads(msg.guild, matchedPlayer, support.challonge);
-					if (threadsAdded > 0) {
-						logger.info(`Added ${msg.author.tag} to ${threadsAdded} match thread(s) via check-in`);
-					}
-				}
-
-				await msg.reply(
-					`You have been successfully verified as **${matchedPlayer.name}** for **${matchedPlayer.tournament.name}**! You've been given the Participant role.`
-				);
-				return;
-			} catch (err) {
-				logger.error(`Error auto-verifying ${msg.author.tag} via check command:`, err);
-				await msg.reply("An error occurred during verification. Please try again later or open a ticket.");
-				return;
-			}
-		}
-
-		// If no match was found, open an onboarding ticket
+		// If no identity link was found, open an onboarding ticket.
 		const category = msg.guild.channels.cache.find(
 			ch => ch.name.toLowerCase() === TICKETS_CATEGORY_NAME && ch.type === ChannelType.GuildCategory
 		);
@@ -163,7 +99,7 @@ const command: CommandDefinition = {
 		);
 
 		if (existingTicket) {
-			await msg.reply(`You already have an open ticket: <#${existingTicket.id}>`);
+			await msg.reply(`You already have an open ticket: <#${existingTicket.id}>. Use \`!email <your_email>\` there to verify.`);
 			return;
 		}
 
@@ -191,10 +127,14 @@ const command: CommandDefinition = {
 				reason: `Onboarding ticket via !check-in for ${msg.author.tag}`
 			});
 
+			const suggestedNote = match.kind === "suggested"
+				? "\n\nWe found enrolment records that may be yours, but a matching name is not proof of ownership, so a Tournament Organizer or email verification is required."
+				: "";
+
 			const welcomeEmbed = new EmbedBuilder()
-				.setTitle("Verification Missing")
+				.setTitle("Verification Required")
 				.setDescription(
-					`Hi <@${msg.author.id}>, we couldn't automatically verify you based on your username.\n\nPlease use the command \`!email <your_email>\` in this channel to verify your identity and get your participant roles. If you need help, a Tournament Organizer will be with you shortly.`
+					`Hi <@${msg.author.id}>, we couldn't automatically verify you from a previously verified account.${suggestedNote}\n\nPlease use the command \`!email <your_email>\` in this channel to verify your identity and get your participant roles. The code expires in 10 minutes. If you need help, a Tournament Organizer will be with you shortly.`
 				)
 				.setColor("#00b0f4");
 

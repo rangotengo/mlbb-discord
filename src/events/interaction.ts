@@ -30,7 +30,7 @@ export function makeHandler(support: CommandSupport) {
 		new ListCommand(organiserRole),
 		new ThreadCommand(),
 		new InviteCommand(),
-		new VerifyPlayerCommand(participantRole, support.challonge),
+		new VerifyPlayerCommand(participantRole, support.tournamentApi),
 		new SetParticipantRoleCommand()
 	];
 
@@ -56,34 +56,38 @@ export function makeHandler(support: CommandSupport) {
 			await autocompletes.get(interaction.commandName)?.autocomplete(interaction);
 		} else if (interaction.isButton()) {
 			const customId = interaction.customId;
+			if (customId.startsWith("push_") && !support.tournamentApi.supportsWrites) {
+				await interaction.reply({ content: "Submit scores on Challengermode, then use !sync to refresh the bot.", ephemeral: true });
+				return;
+			}
 			if (customId.startsWith("push_")) {
 				// Format: push_{tournamentId}_{matchId}_{winnerId}_{winnerScore}_{loserScore}
 				const parts = customId.split("_");
 				if (parts.length === 6) {
 					const [, tId, matchIdStr, winnerIdStr, wScoreStr, lScoreStr] = parts;
-					const matchId = parseInt(matchIdStr, 10);
-					const winnerId = parseInt(winnerIdStr, 10);
+					const matchId = matchIdStr;
+					const winnerId = winnerIdStr;
 					const wScore = parseInt(wScoreStr, 10);
 					const lScore = parseInt(lScoreStr, 10);
 
 					try {
 						await interaction.deferUpdate();
-						// Get the tournament to find the actual Challonge ID
+						// Get the tournament to find the actual Challengermode ID
 						const tournament = await ChallongeTournament.findOne({ where: { tournamentId: tId } });
 						if (!tournament) {
 							throw new Error(`Tournament ${tId} not found`);
 						}
 						// We need a partial match object for the API wrapper
-						const partialMatch = { matchId } as import("../website/challonge").WebsiteMatch;
-						await support.challonge.submitScore(tournament.challongeTournamentId, partialMatch, winnerId, wScore, lScore);
+						const partialMatch = { matchId } as import("../website/challengermode").WebsiteMatch;
+						await support.tournamentApi.submitScore(tournament.challongeTournamentId, partialMatch, winnerId, wScore, lScore);
 						await interaction.editReply({
-							content: `✅ Score pushed to Challonge by <@${interaction.user.id}>!`,
+							content: `✅ Score pushed to Challengermode by <@${interaction.user.id}>!`,
 							components: [],
 							embeds: interaction.message.embeds
 						});
 					} catch (e) {
 						logger.error("Error manually pushing score:", e);
-						await interaction.followUp({ content: "❌Failed to push score to Challonge.", ephemeral: true });
+						await interaction.followUp({ content: "❌Failed to push score to Challengermode.", ephemeral: true });
 					}
 				}
 			} else if (customId.startsWith("reject_push_")) {

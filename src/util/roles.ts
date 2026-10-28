@@ -1,6 +1,5 @@
 import { GuildMember } from "discord.js";
 import { ChallongeTournament } from "../database/orm/ChallongeTournament";
-import { getConfig } from "../config";
 import { Logger } from "./logger";
 import { ParticipantRoleProvider } from "../role/participant";
 
@@ -33,9 +32,10 @@ export async function assignParticipantRole(
 	participantRoleProvider?: ParticipantRoleProvider
 ): Promise<boolean> {
 	// If tournament has a custom role configured, use it directly
-	if (tournament.participantRoleName) {
+	if (tournament.participantRoleId || tournament.participantRoleName) {
 		const roleName = getParticipantRoleName(tournament);
-		const role = member.guild.roles.cache.find(r => r.name === roleName);
+		const role = (tournament.participantRoleId && member.guild.roles.cache.get(tournament.participantRoleId))
+			|| member.guild.roles.cache.find(r => r.name === roleName);
 
 		if (!role) {
 			logger.warn(`Participant role "${roleName}" not found for tournament ${tournament.tournamentId}`);

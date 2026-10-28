@@ -38,15 +38,7 @@ export function firstMentionOrFail(msg: Message): User {
 }
 
 export function parseUserMention(who: string): string | null {
-	if (who.startsWith("<@") && who.endsWith(">")) {
-		if (who.charAt(2) === "!") {
-			return who.slice(3, -1);
-		} else {
-			return who.slice(2, -1);
-		}
-	} else {
-		return null;
-	}
+	return /^<@!?([0-9]{17,20})>$/.exec(who)?.[1] ?? null;
 }
 
 /**

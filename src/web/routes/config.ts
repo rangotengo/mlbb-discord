@@ -1,90 +1,76 @@
+import { updateEnvContent } from "../../config/envFile";
+import { EDITABLE_SETTINGS, RestartRequirement, validateSettings } from "../../config/settings";
 import { Router, Request, Response } from "express";
 import fs from "fs";
 import path from "path";
 import { getLogger } from "../../util/logger";
 import dotenv from "dotenv";
+import { UserError } from "../../util/errors";
 
 const router = Router();
 const logger = getLogger("web:routes:config");
 
-const envPath = path.resolve(process.cwd(), ".env");
+const envPath = process.env.DOTENV_CONFIG_PATH || path.resolve(process.cwd(), ".env");
 
-// Helper to update .env file
-function updateEnv(updates: Record<string, string>) {
+function updateEnv(updates: Record<string, string>): boolean {
 	try {
-        let envFileContent = "";
-        if (fs.existsSync(envPath)) {
-            envFileContent = fs.readFileSync(envPath, "utf-8");
-        }
-        
-        const lines = envFileContent.split('\n');
-        
-        const updatedLines = [];
-        const seenKeys = new Set<string>();
-
-        // Update existing keys
-        for (const line of lines) {
-            const match = line.match(/^([^#=]+)=(.*)$/);
-            if (match) {
-                const key = match[1].trim();
-                if (updates[key] !== undefined) {
-                    updatedLines.push(`${key}=${updates[key]}`);
-                    seenKeys.add(key);
-                } else {
-                    updatedLines.push(line);
-                }
-            } else {
-                updatedLines.push(line);
-            }
-        }
-
-        // Add new keys
-        for (const [key, value] of Object.entries(updates)) {
-            if (!seenKeys.has(key)) {
-                updatedLines.push(`${key}=${value}`);
-            }
-        }
-
-        fs.writeFileSync(envPath, updatedLines.join('\n'), "utf-8");
-        
-        // Reload dotenv to reflect changes in current process process.env if possible.
-        // process.env won't automatically update for already destructured things, 
-        // but it will update process.env itself.
-        dotenv.config({ override: true });
-        
-        return true;
+		let envFileContent = "";
+		if (fs.existsSync(envPath)) {
+			envFileContent = fs.readFileSync(envPath, "utf-8");
+		}
+		const temporary = `${envPath}.${process.pid}.tmp`;
+		fs.writeFileSync(temporary, updateEnvContent(envFileContent, updates), "utf-8");
+		fs.renameSync(temporary, envPath);
+		dotenv.config({ path: envPath, override: true, quiet: true });
+		return true;
 	} catch (error) {
 		logger.error("Failed to update .env file:", error);
 		return false;
 	}
 }
 
-// Helper to get parsed .env
-function getParsedEnv() {
-    if (!fs.existsSync(envPath)) return {};
-    const content = fs.readFileSync(envPath, "utf-8");
-    return dotenv.parse(content);
+function getParsedEnv(): Record<string, string> {
+	if (!fs.existsSync(envPath)) return {};
+	return dotenv.parse(fs.readFileSync(envPath, "utf-8"));
 }
 
-// GET /config
+function restartFor(changes: string[]): RestartRequirement {
+	let restart: RestartRequirement = "none";
+	for (const key of changes) {
+		const requirement = EDITABLE_SETTINGS.find(setting => setting.key === key)?.restart || "none";
+		if (requirement === "server") return "server";
+		if (requirement === "bot") restart = "bot";
+	}
+	return restart;
+}
+
+function configFields(parsed: Record<string, string>): Array<{ key: string; label: string; description: string; value: string; configured: boolean; secret: boolean; restart: RestartRequirement }> {
+	return EDITABLE_SETTINGS.map(setting => ({
+		key: setting.key,
+		label: setting.label,
+		description: setting.description,
+		value: setting.secret ? "" : parsed[setting.key] || "",
+		configured: Boolean(parsed[setting.key]),
+		secret: setting.secret,
+		restart: setting.restart
+	}));
+}
+
 router.get("/config", (req: Request, res: Response) => {
 	try {
-        const parsed = getParsedEnv();
-        
-        // Create an array or object to pass to view, EXCLUDING DISCORD_TOKEN
-        const configData: Record<string, string> = {};
-        for (const [key, value] of Object.entries(parsed)) {
-            if (key !== "DISCORD_TOKEN") {
-                configData[key] = value;
-            }
-        }
-
+		const parsed = getParsedEnv();
+		const fields = configFields(parsed);
+		const configData: Record<string, string> = {};
+		for (const field of fields) {
+			if (!field.secret) configData[field.key] = field.value;
+		}
 		res.render("config/index", {
 			title: "Configuration",
 			path: "/config",
+			fields,
 			configData,
 			success: req.query.success === "true",
-			error: req.query.error,
+			error: typeof req.query.error === "string" ? req.query.error : undefined,
 			botRestart: req.query.botRestart === "true",
 			serverRestart: req.query.serverRestart === "true"
 		});
@@ -98,46 +84,46 @@ router.get("/config", (req: Request, res: Response) => {
 	}
 });
 
-// POST /config
+router.get("/api/config", (req: Request, res: Response) => {
+	res.json({ success: true, data: { fields: configFields(getParsedEnv()) } });
+});
+
 router.post("/config", (req: Request, res: Response) => {
 	try {
-        const body = req.body;
-        
-        // Exclude DISCORD_TOKEN just in case it was somehow submitted
-        if (body.DISCORD_TOKEN) {
-            delete body.DISCORD_TOKEN;
-        }
-
-        const oldEnv = getParsedEnv();
-
-        let botRestart = false;
-        let serverRestart = false;
-
-        const success = updateEnv(body);
-
-		if (success) {
-            for (const [key, value] of Object.entries(body)) {
-                if (oldEnv[key] !== value) {
-                    if (key === "DOT_DEFAULT_PREFIX" || key === "DOT_DEFAULT_TO_ROLE") {
-                        botRestart = true;
-                    }
-                    if (key === "SQLITE_DB") {
-                        serverRestart = true;
-                    }
-                }
-            }
-
-            let redirectUrl = "/config?success=true";
-            if (serverRestart) redirectUrl += "&serverRestart=true";
-            else if (botRestart) redirectUrl += "&botRestart=true";
-
-			res.redirect(redirectUrl);
-		} else {
-			res.redirect("/config?error=Failed to update configuration");
+		const body = req.body && typeof req.body === "object" ? { ...req.body as Record<string, unknown> } : {};
+		delete body.DISCORD_TOKEN;
+		delete body._csrf;
+		const current = getParsedEnv();
+		const invalid = validateSettings(body, current);
+		if (invalid) {
+			res.redirect(`/config?error=${encodeURIComponent(invalid)}`);
+			return;
 		}
+
+		const updates: Record<string, string> = {};
+		const changed: string[] = [];
+		for (const [key, value] of Object.entries(body)) {
+			if (typeof value !== "string") continue;
+			const setting = EDITABLE_SETTINGS.find(item => item.key === key);
+			if (!setting || (setting.secret && value === "")) continue;
+			updates[key] = value;
+			if ((current[key] || "") !== value) changed.push(key);
+		}
+
+		if (!updateEnv(updates)) {
+			res.redirect("/config?error=Failed%20to%20update%20configuration");
+			return;
+		}
+
+		const restart = restartFor(changed);
+		const params = new URLSearchParams({ success: "true" });
+		if (restart === "server") params.set("serverRestart", "true");
+		else if (restart === "bot") params.set("botRestart", "true");
+		res.redirect(`/config?${params.toString()}`);
 	} catch (error) {
 		logger.error("Error saving config:", error);
-		res.redirect("/config?error=Server error while saving");
+		const message = error instanceof UserError ? error.message : "Server error while saving";
+		res.redirect(`/config?error=${encodeURIComponent(message)}`);
 	}
 });
 

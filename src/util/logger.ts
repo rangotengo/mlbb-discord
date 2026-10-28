@@ -10,7 +10,7 @@ const webhook = process.env.DOT_LOGGER_WEBHOOK ? new WebhookClient({ url: proces
 const MAX_LOGS = 100;
 const logBuffer: { timestamp: string, namespace: string, message: string }[] = [];
 
-export function getRecentLogs() {
+export function getRecentLogs(): { timestamp: string; namespace: string; message: string }[] {
 	return [...logBuffer];
 }
 

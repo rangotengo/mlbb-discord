@@ -14,8 +14,8 @@ export class ChallongeTournament extends BaseEntity {
 	@PrimaryColumn()
 	tournamentId!: string;
 
-	/// The actual Challonge tournament ID/slug (extracted from Challonge URL)
-	/// This is used to query the Challonge API
+	/// The actual Challengermode tournament ID/slug (extracted from Challengermode URL)
+	/// This is used to query the Challengermode API
 	@Column()
 	challongeTournamentId!: string;
 
@@ -31,7 +31,7 @@ export class ChallongeTournament extends BaseEntity {
 	@Column({ length: 20 })
 	owningDiscordServer!: string;
 
-	/// Formats supported by Challonge, named the same way.
+	/// Formats supported by Challengermode, named the same way.
 	@EnumColumn(TournamentFormat, "SWISS")
 	format!: TournamentFormat;
 
@@ -66,6 +66,10 @@ export class ChallongeTournament extends BaseEntity {
 	@Column({ nullable: true, length: 100 })
 	participantRoleName?: string;
 
+	/// Stable Discord role snowflake. Name remains a display fallback after renames.
+	@Column({ type: "varchar", length: 20, nullable: true })
+	participantRoleId?: string | null;
+
 	/// The currently active round for this tournament. Null means no round is active.
 	/// Used to determine which match threads newly verified users should be added to.
 	@Column({ nullable: true })
@@ -74,6 +78,15 @@ export class ChallongeTournament extends BaseEntity {
 	/// When true, all check-in and verification commands (!check-in, !email, !verify) are blocked.
 	@Column({ default: false })
 	checkInDisabled!: boolean;
+
+	@Column({ type: process.env.SQLITE_DB ? "datetime" : "timestamptz", nullable: true })
+	lastSyncAttempt?: Date | null;
+
+	@Column({ type: process.env.SQLITE_DB ? "datetime" : "timestamptz", nullable: true })
+	lastSyncSuccess?: Date | null;
+
+	@Column({ type: "varchar", length: 32, nullable: true })
+	syncSource?: string | null;
 
 	/// The ORM relationship for all participants, pending and confirmed.
 	@OneToMany(() => Participant, participant => participant.tournament, { cascade: true, onDelete: "CASCADE" })
@@ -89,9 +102,9 @@ export class ChallongeTournament extends BaseEntity {
 	enrolledPlayers!: EnrolledPlayer[];
 
 	/**
-	 * Gets the actual Challonge tournament ID for API calls.
+	 * Gets the actual Challengermode tournament ID for API calls.
 	 *
-	 * @returns The Challonge tournament ID to use for API queries
+	 * @returns The Challengermode tournament ID to use for API queries
 	 */
 	getChallongeIdForApi(): string {
 		return this.challongeTournamentId;

@@ -48,7 +48,7 @@ async function getCheckInSummary(tournamentId: string): Promise<string> {
 	for (const [team, stats] of sortedTeams) {
 		const checkMark = stats.checkedIn === stats.total ? "✅" : stats.checkedIn > 0 ? "🔶" : "❌";
 		// Truncate team name if too long for display
-		const displayName = team.length > 20 ? team.substring(0, 17) + "..." : team;
+		const displayName = team.length > 20 ? `${team.substring(0, 17)}...` : team;
 		summary += `${checkMark} ${displayName.padEnd(20)} ${stats.checkedIn}/${stats.total} checked in\n`;
 	}
 
@@ -126,11 +126,7 @@ const command: CommandDefinition = {
 			const tournament = await support.database.getTournament(id);
 			const checkInSummary = await getCheckInSummary(id);
 
-			await msg.reply(
-				`**${tournament.name}** Status\n` +
-				`Current Status: ${statusEmoji[tournament.status]} **${tournament.status}**` +
-				checkInSummary
-			);
+			await msg.reply(`**${tournament.name}** Status\nCurrent Status: ${statusEmoji[tournament.status]} **${tournament.status}**${checkInSummary}`);
 			return;
 		}
 

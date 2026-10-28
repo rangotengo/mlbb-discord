@@ -8,7 +8,7 @@ import { ParticipantRoleProvider } from "./role/participant";
 import { TimeWizard } from "./timer";
 import { send } from "./util/discord";
 import { getLogger } from "./util/logger";
-import { WebsiteWrapperChallonge } from "./website/challonge";
+import { getTournamentApi } from "./website/challengermode";
 import { createWebServer, setBotClient } from "./web/server";
 
 const logger = getLogger("index");
@@ -20,7 +20,7 @@ const logger = getLogger("index");
 	// Start web server
 	await createWebServer();
 
-	const challonge = new WebsiteWrapperChallonge(config.challongeUsername, config.challongeToken);
+	const tournamentApi = getTournamentApi(config.challengermodeRefreshKey);
 
 	const bot = new Client({
 		intents: [
@@ -53,7 +53,7 @@ const logger = getLogger("index");
 		participantRole,
 		hostRole,
 		database,
-		challonge,
+		tournamentApi,
 		scores: new Map(),
 		timeWizard
 	});

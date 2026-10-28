@@ -43,21 +43,16 @@ export class TimeWizard {
 		finalMessage: string,
 		cronIntervalSeconds: number
 	): Promise<void> {
-		this.timers.set(
-			tournamentId,
-			await Promise.all(
-				channels.map(
-					async channel =>
-						await PersistentTimer.create(
-							this.delegate,
-							end,
-							channel,
-							finalMessage,
-							cronIntervalSeconds,
-							tournamentId
-						)
-				)
-			)
-		);
+		const results = await Promise.allSettled(channels.map(channel => PersistentTimer.create(
+			this.delegate, end, channel, finalMessage, cronIntervalSeconds, tournamentId
+		)));
+		const created = results.flatMap(result => result.status === "fulfilled" ? [result.value] : []);
+		const failed = results.find(result => result.status === "rejected");
+		if (failed?.status === "rejected") {
+			await Promise.all(created.map(timer => timer.abort()));
+			throw failed.reason;
+		}
+		await this.cancel(tournamentId);
+		this.timers.set(tournamentId, created);
 	}
 }

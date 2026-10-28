@@ -1,10 +1,10 @@
-import { WebsiteMatch, WebsiteWrapperChallonge } from "../website/challonge";
+import { WebsiteMatch, WebsiteWrapperChallengermode } from "../website/challengermode";
 import { UserError } from "./errors";
 
 export async function findMatch(
 	tournamentId: string,
-	playerId: number,
-	challonge: WebsiteWrapperChallonge
+	playerId: string,
+	challonge: WebsiteWrapperChallengermode
 ): Promise<WebsiteMatch | undefined> {
 	// an open match will be in the current round
 	const matches = await challonge.getMatches(tournamentId, true, playerId);
@@ -16,8 +16,8 @@ export async function findMatch(
 // this can also find open matches, but uses a weighter query to include closed matches
 export async function findClosedMatch(
 	tournamentId: string,
-	playerId: number,
-	challonge: WebsiteWrapperChallonge
+	playerId: string,
+	challonge: WebsiteWrapperChallengermode
 ): Promise<WebsiteMatch | undefined> {
 	// don't filter for open so we can submit to closed
 	// don't filter for player so we can get correct round no.

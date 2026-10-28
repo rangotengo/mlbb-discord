@@ -5,6 +5,7 @@ import {
 	CacheType,
 	ChatInputCommandInteraction
 } from "discord.js";
+import { UserError } from "./util/errors";
 import { serialiseInteraction } from "./util";
 import { Logger } from "./util/logger";
 
@@ -51,7 +52,7 @@ export abstract class SlashCommand<Cached extends CacheType = CacheType> {
 			} else {
 				method = "reply" as const;
 			}
-			await interaction[method]("Something went wrong. Please try again later.").catch(e =>
+			await interaction[method](error instanceof UserError ? error.message : "Something went wrong. Please try again later.").catch(e =>
 				this.logger.error(serialiseInteraction(interaction), e)
 			);
 		}

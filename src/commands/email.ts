@@ -1,10 +1,12 @@
 import { EmbedBuilder } from "discord.js";
 import { CommandDefinition } from "../Command";
 import { EnrolledPlayer } from "../database/orm/EnrolledPlayer";
-import { sendEmail } from "../role/helper/email";
+import { sendOtpEmail, isEmailConfigured } from "../role/helper/email";
 import { getLogger } from "../util/logger";
 import { ChallongeTournament } from "../database/orm/ChallongeTournament";
 import { isTournamentOrganizer, TO_COMMAND_BLOCKED, NO_TOURNAMENTS_FOUND, TICKET_CHANNEL_PREFIX } from "../util";
+import { issueChallenge, recordDeliveryAttempt } from "../role/helper/verification";
+import { otpPolicyFromEnv } from "../util/otp";
 
 const logger = getLogger("command:email");
 
@@ -31,10 +33,20 @@ const command: CommandDefinition = {
 
 		// Strip all whitespace including invisible/unicode chars (e.g. \r, non-breaking space)
 		// that mobile Discord clients may inject when users paste emails
-		let emailArg = args[0].replace(/[\s\u00A0\u200B\u200C\u200D\uFEFF\r]/g, "").toLowerCase();
+		const emailArg = args[0].replace(/[\s\u200B-\u200D]/g, "").toLowerCase();
 		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 		if (!emailRegex.test(emailArg)) {
 			await msg.reply("Invalid email address.");
+			return;
+		}
+
+		if (!isEmailConfigured()) {
+			await msg.reply({
+				embeds: [new EmbedBuilder()
+					.setTitle("Verification Unavailable")
+					.setDescription("Email verification is not configured on this server. Please ask a Tournament Organizer to verify you manually.")
+					.setColor(0xff0000)]
+			});
 			return;
 		}
 
@@ -48,24 +60,12 @@ const command: CommandDefinition = {
 			return;
 		}
 
-		const tournamentIds = tournaments.map(t => t.tournamentId);
 		const tournamentMap = new Map(tournaments.map(t => [t.tournamentId, t]));
 
 		// Find enrolled players with this email in any tournament of this server (case-insensitive)
-		let players = await EnrolledPlayer.createQueryBuilder("player")
+		const players = (await EnrolledPlayer.createQueryBuilder("player")
 			.where("LOWER(player.email) = LOWER(:email)", { email: emailArg })
-			.getMany();
-
-		players = players.filter(p => tournamentIds.includes(p.tournamentId));
-
-		// Block if all tournaments the player is enrolled in have check-in disabled
-		if (players.length > 0 && players.every(p => {
-			const tournament = tournamentMap.get(p.tournamentId);
-			return tournament?.checkInDisabled === true;
-		})) {
-			await msg.reply("❌ Check in is already closed. Please contact the Tournament Organizer for assistance.");
-			return;
-		}
+			.getMany()).filter(p => tournamentMap.has(p.tournamentId));
 
 		if (players.length === 0) {
 			const embed = new EmbedBuilder()
@@ -76,18 +76,19 @@ const command: CommandDefinition = {
 			return;
 		}
 
-		// Check statuses
-		const firstPlayer = players[0];
-		if (firstPlayer.emailSent >= 3) {
-			const embed = new EmbedBuilder()
-				.setTitle("Verification Failed")
-				.setDescription("You have exceeded the maximum number of attempts. Please contact the Admin for further assistance.")
-				.setColor(0xff0000);
-			await msg.reply({ embeds: [embed] });
+		// Only tournaments whose check-in is open are eligible (guide 4): the
+		// operation proceeds when at least one relevant tournament is open,
+		// and closed ones are never touched.
+		const eligible = players.filter(p => !p.identityVerified && tournamentMap.get(p.tournamentId)!.checkInDisabled !== true);
+		const closed = players.filter(p => tournamentMap.get(p.tournamentId)!.checkInDisabled === true);
+
+		if (eligible.length === 0) {
+			const closedNames = closed.map(p => `**${tournamentMap.get(p.tournamentId)!.name}**`).join(", ");
+			await msg.reply(`❌ Check-in is closed for ${closedNames}. Please contact the Tournament Organizer for assistance.`);
 			return;
 		}
 
-		if (players.every(p => p.verified)) {
+		if (eligible.every(p => p.identityVerified)) {
 			const embed = new EmbedBuilder()
 				.setTitle("Verification Failed")
 				.setDescription("This Email has already been verified.")
@@ -96,28 +97,64 @@ const command: CommandDefinition = {
 			return;
 		}
 
-		const otp = Math.floor(100000 + Math.random() * 900000);
+		const policy = otpPolicyFromEnv();
 
-		for (const p of players) {
-			p.otp = otp;
-			p.emailSent += 1;
-			// Link the discord ID early so verify knows who sent this
-			p.discordId = msg.author.id;
-			p.discordUsername = msg.author.username;
-			await p.save();
-		}
+		// Issue the challenge first; a provider failure afterwards does not
+		// permanently exhaust the participant's allowance (guide 2.3).
+		const issued = await issueChallenge({
+			discordId: msg.author.id,
+			guildId: msg.guildId!,
+			email: emailArg
+		});
 
-		try {
-			await sendEmail(emailArg, otp);
-		} catch (error) {
-			logger.error("Failed to send OTP email:", error);
-			await msg.reply("Encountered an error sending the OTP email. Please try again later or contact an Admin.");
+		if (!issued.ok) {
+			if (issued.error === "no-eligible") {
+				await msg.reply("No tournament is currently open for check-in.");
+				return;
+			}
+			if (issued.error === "max-sends") {
+				const embed = new EmbedBuilder()
+					.setTitle("Verification Failed")
+					.setDescription(`You have reached the limit of ${policy.maxSends} code requests. Please contact a Tournament Organizer for assistance.`)
+					.setColor(0xff0000);
+				await msg.reply({ embeds: [embed] });
+				return;
+			}
+			const seconds = Math.max(1, Math.ceil((issued.retryAt.getTime() - Date.now()) / 1000));
+			await msg.reply(`Please wait ${seconds}s before requesting a new code.`);
 			return;
 		}
 
+		const delivery = await sendOtpEmail(emailArg, issued.code);
+		await recordDeliveryAttempt({
+			discordId: msg.author.id,
+			guildId: msg.guildId!,
+			email: emailArg,
+			accepted: delivery.accepted
+		});
+
+		if (!delivery.accepted) {
+			logger.error(`OTP delivery failed (${delivery.reason}): ${delivery.detail}`);
+			const embed = new EmbedBuilder()
+				.setTitle("Verification Code Not Sent")
+				.setDescription(
+					`Your code could **not** be sent: ${delivery.detail}.\n\nNo code has been delivered, so please do not wait for an email. You can try again shortly, or ask a Tournament Organizer to verify you manually.`
+				)
+				.setColor(0xff0000);
+			await msg.reply({ embeds: [embed] });
+			return;
+		}
+
+		const expiryMinutes = Math.max(1, Math.round(policy.expiryMs / 60000));
+		const closedNotice = closed.length > 0
+			? `\n\nCheck-in is closed for ${closed.map(p => `**${tournamentMap.get(p.tournamentId)!.name}**`).join(", ")}, so that tournament will not be verified.`
+			: "";
+
 		const embed = new EmbedBuilder()
 			.setTitle("Verification Under Process")
-			.setDescription(`An OTP has been sent to your email. Enter the OTP using the command \`!verify\` or resend OTP using \`!email\``)
+			.setDescription(
+				`The email provider accepted your code. Enter the OTP using the command \`!verify\` or resend OTP using \`!email\`. The code expires in ${expiryMinutes} minute${expiryMinutes === 1 ? "" : "s"}; a new request invalidates the previous one.${closedNotice}`
+			)
 			.addFields([
 				{ name: "To submit OTP", value: "```!verify 123456```", inline: false },
 				{ name: "To resend OTP", value: "```!email example@abc.com```", inline: false }

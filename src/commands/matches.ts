@@ -1,3 +1,4 @@
+import { formatCSVDate, formatCSVRow } from "../util/csv";
 import { AttachmentBuilder, EmbedBuilder } from "discord.js";
 import { CommandDefinition } from "../Command";
 import { isTournamentHost } from "../util/discord";
@@ -32,11 +33,11 @@ const command: CommandDefinition = {
 			isTournamentHost(msg.member, id)
 		);
 
-		// Use the actual Challonge tournament ID to query Challonge API
+		// Use the actual Challengermode tournament ID to query Challengermode API
 		const challongeId = tournament.challongeTournamentId;
 
-		const allMatches = await support.challonge.getMatches(challongeId, false);
-		const players = await support.challonge.getPlayers(challongeId);
+		const allMatches = await support.tournamentApi.getMatches(challongeId, false);
+		const players = await support.tournamentApi.getPlayers(challongeId);
 
 		// Fetch existing schedules from database for CSV export
 		const matchIds = allMatches.map(m => m.matchId);
@@ -51,17 +52,7 @@ const command: CommandDefinition = {
 			const csvHeader = "match_id,match,scheduled_time,timezone\n";
 			const csvRows = allMatches.map(match => {
 				const schedule = scheduleMap.get(match.matchId);
-				let scheduledTime = "";
-				if (schedule?.scheduledTime) {
-					// Format: YYYY-MM-DD HH:MM:SS
-					const year = schedule.scheduledTime.getFullYear();
-					const month = String(schedule.scheduledTime.getMonth() + 1).padStart(2, "0");
-					const day = String(schedule.scheduledTime.getDate()).padStart(2, "0");
-					const hours = String(schedule.scheduledTime.getHours()).padStart(2, "0");
-					const minutes = String(schedule.scheduledTime.getMinutes()).padStart(2, "0");
-					const seconds = String(schedule.scheduledTime.getSeconds()).padStart(2, "0");
-					scheduledTime = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-				}
+				const scheduledTime = formatCSVDate(schedule?.scheduledTime);
 
 				// Get player names for match description
 				const p1 = match.state === "pending"
@@ -72,7 +63,7 @@ const command: CommandDefinition = {
 					: (players.find(p => p.challongeId === match.player2)?.name || "Unknown");
 				const matchDesc = `${p1} vs ${p2}`;
 
-				return `${match.matchId},${matchDesc},${scheduledTime},IST`;
+				return formatCSVRow([match.matchId, matchDesc, scheduledTime, "UTC"]);
 			});
 			const csvContent = csvHeader + csvRows.join("\n");
 

@@ -1,9 +1,10 @@
+import { UUID_PATTERN } from "../website/challengermode";
 import { CommandDefinition } from "../Command";
 import { TournamentStatus } from "../database/interface";
 import { isTournamentHost } from "../util/discord";
 import { getLogger } from "../util/logger";
 import { resolveTournamentId } from "../util/tournament";
-import { downloadAndValidateCSV, parseCSVRow } from "../util";
+import { downloadAndValidateCSV, parseCSV } from "../util";
 import { MatchSchedule } from "../database/orm/MatchSchedule";
 import { parseDateTime } from "../util/parseDateTime";
 
@@ -40,10 +41,10 @@ const command: CommandDefinition = {
 			return;
 		}
 
-		const lines = csvText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+		const lines = parseCSV(csvText);
 
 		// Parse header to find column indices
-		const headers = parseCSVRow(lines[0]).map(h => h.toLowerCase());
+		const headers = lines[0].map(h => h.toLowerCase());
 		const matchIdIdx = headers.findIndex(h => h.includes("match") && h.includes("id"));
 		const scheduledTimeIdx = headers.findIndex(h => h.includes("scheduled") || h.includes("time") || h.includes("date"));
 		const timezoneIdx = headers.findIndex(h => h.includes("timezone") || h.includes("tz") || h.includes("zone"));
@@ -59,7 +60,7 @@ const command: CommandDefinition = {
 
 		// Process each row
 		for (let i = 1; i < lines.length; i++) {
-			const columns = parseCSVRow(lines[i]);
+			const columns = lines[i];
 			const matchIdStr = columns[matchIdIdx];
 			const scheduledTimeStr = columns[scheduledTimeIdx];
 			const timezoneStr = timezoneIdx !== -1 ? columns[timezoneIdx] : undefined;
@@ -70,8 +71,8 @@ const command: CommandDefinition = {
 				continue;
 			}
 
-			const matchId = parseInt(matchIdStr, 10);
-			if (isNaN(matchId)) {
+			const matchId = matchIdStr.trim().toLowerCase();
+			if (!UUID_PATTERN.test(matchId)) {
 				failCount++;
 				errors.push(`Row ${i + 1}: Invalid match_id "${matchIdStr}"`);
 				continue;

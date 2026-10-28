@@ -1,5 +1,4 @@
 import { Message } from "discord.js";
-import { FetchError } from "./util/errors";
 import { DatabaseWrapperPostgres } from "./database/postgres";
 import { HostRoleProvider } from "./role/host";
 import { OrganiserRoleProvider } from "./role/organiser";
@@ -8,12 +7,12 @@ import { TimeWizard } from "./timer";
 import { ChallongeAPIError, UserError } from "./util/errors";
 import { getLogger } from "./util/logger";
 import { Public } from "./util/types";
-import { WebsiteWrapperChallonge } from "./website/challonge";
+import { WebsiteWrapperChallengermode } from "./website/challengermode";
 
 const logger = getLogger("command");
 
 interface MatchScore {
-	playerId: number;
+	playerId: string;
 	playerDiscord: string;
 	playerScore: number;
 	oppScore: number;
@@ -22,8 +21,8 @@ interface MatchScore {
 export interface CommandSupport {
 	organiserRole: OrganiserRoleProvider;
 	database: Public<DatabaseWrapperPostgres>;
-	challonge: WebsiteWrapperChallonge;
-	scores: Map<string, Map<number, MatchScore>>;
+	tournamentApi: WebsiteWrapperChallengermode;
+	scores: Map<string, Map<string, MatchScore>>;
 	participantRole: ParticipantRoleProvider;
 	hostRole: HostRoleProvider;
 	timeWizard: TimeWizard;
@@ -95,12 +94,13 @@ export class Command {
 				return;
 			}
 			// make-fetch-happen and minipass-fetch do not export their otherwise identical FetchError
-			if (e instanceof ChallongeAPIError || (e as FetchError).name === "FetchError") {
+			if (e instanceof ChallongeAPIError || (e instanceof Error && e.name === "FetchError")) {
 				logger.warn(this.log(msg, { args }), e);
-				await msg.reply(`Something went wrong with Challonge! Please try again later.`).catch(logger.error);
+				await msg.reply(`Something went wrong with Challengermode! Please try again later.`).catch(logger.error);
 				return;
 			}
 			logger.error(this.log(msg, { args }), e); // internal error
+			await msg.reply("Something went wrong. Please try again later.").catch(logger.error);
 		}
 	}
 }

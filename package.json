@@ -1,13 +1,14 @@
 {
 	"name": "dot-tournament-bot",
 	"version": "0.1.0",
-	"description": "A Discord bot to facilitate organising Challonge tournaments and verify submitted decks.",
+	"description": "A Discord bot to facilitate organising Challengermode tournaments and verifying participants.",
 	"private": true,
 	"scripts": {
 		"dev": "NODE_NO_WARNINGS=1 nodemon --watch .env -e ts,env --exec ts-node src/index.ts",
 		"start": "node --enable-source-maps --no-deprecation dist/index.js",
-		"test": "nyc mocha --config test/.mocharc.yml test/*.ts test/**/*.unit.ts",
-		"cover": "nyc report",
+		"test:challengermode": "npm run build && node --require ./test/helpers/setup.cjs --test test/challengermode*.test.cjs",
+		"test": "npm run build && npm run electron:build && node --require ./test/helpers/setup.cjs --test test/*.test.cjs",
+		"cover": "npm run build && npm run electron:build && node test/coverage.cjs",
 		"lint": "eslint src",
 		"build": "shx rm -f tsconfig.tsbuildinfo && tsc && shx rm -rf dist/web/views dist/web/public && shx mkdir -p dist/web && shx cp -r src/web/views dist/web/views && shx cp -r src/web/public dist/web/public",
 		"electron:dev": "electron ./dist/electron/main.js",
@@ -28,8 +29,7 @@
 			"dist/electron/**/*",
 			"dist/**/*",
 			"!dist/installers/**",
-			"ui/**/*",
-			"data/**/*"
+			"ui/**/*"
 		],
 		"extraResources": [
 			{
@@ -100,12 +100,29 @@
 		"@types/sql.js": "^1.4.9",
 		"electron": "^35.0.0",
 		"electron-builder": "^25.1.8",
+		"graphql": "17.0.2",
 		"mocha": "^11.7.5",
 		"nodemon": "^3.1.14",
 		"shx": "^0.3.4"
 	},
 	"eslintConfig": {
-		"extends": "@alphakretin"
+		"extends": "@alphakretin",
+		"overrides": [
+			{
+				"files": [
+					"src/web/public/**/*.js"
+				],
+				"env": {
+					"browser": true
+				},
+				"globals": {
+					"Dot": "readonly"
+				},
+				"rules": {
+					"@typescript-eslint/explicit-function-return-type": "off"
+				}
+			}
+		]
 	},
 	"prettier": "@alphakretin/essentials",
 	"nyc": {

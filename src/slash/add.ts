@@ -26,9 +26,9 @@ export class AddCommand extends SlashCommand {
 			.addSubcommand(
 				new SlashCommandSubcommandBuilder()
 					.setName("tournament")
-					.setDescription("Add a Challonge tournament to the bot.")
+					.setDescription("Add a Challengermode tournament to the bot.")
 					.addStringOption(option =>
-						option.setName("url").setDescription("The Challonge tournament URL (e.g., https://challonge.com/xyz)").setRequired(true)
+						option.setName("url").setDescription("The Challengermode tournament URL (e.g., https://www.challengermode.com/tournaments/<uuid>)").setRequired(true)
 					)
 					.addStringOption(option =>
 						option.setName("name").setDescription("The custom tournament ID for the bot (e.g., mlbb_spring_2024)").setRequired(true)
@@ -65,7 +65,7 @@ export class AddCommand extends SlashCommand {
 		const result = await addTournament(challongeUrl, customName, interaction.guildId!, interaction.user.id);
 
 		if (!result.success) {
-			await interaction.reply({ content: result.error!, ephemeral: true });
+			await interaction.editReply({ content: result.error! });
 			return;
 		}
 
@@ -81,11 +81,11 @@ export class AddCommand extends SlashCommand {
 		const roleNote = participantRole ? `\nParticipant role: **${participantRole.name}**` : "";
 
 		await interaction.editReply({
-			content: `Tournament **${result.customName}** has been added!\n\nChallonge URL: ${result.url}\nChallonge ID: ${result.challongeId}\nHost: <@${result.userId}>${roleNote}\n\nUse \`!sync ${result.customName}\` to sync with Challonge and fetch tournament data.`
+			content: `Tournament **${result.customName}** has been added!\n\nChallonge URL: ${result.url}\nChallonge ID: ${result.challongeId}\nHost: <@${result.userId}>${roleNote}\n\nUse \`!sync ${result.customName}\` to sync with Challengermode and fetch tournament data.`
 		});
 
 		this.logger.verbose(
-			`Tournament "${result.customName}" added by ${interaction.user.id} in server ${interaction.guildId} from Challonge URL ${result.url}`
+			`Tournament "${result.customName}" added by ${interaction.user.id} in server ${interaction.guildId} from Challengermode URL ${result.url}`
 		);
 	}
 }

@@ -15,7 +15,7 @@ export enum TournamentFormat {
 
 export interface DatabasePlayer {
 	discordId: string;
-	challongeId: number;
+	challongeId: string;
 
 }
 
@@ -43,7 +43,7 @@ export interface DatabaseTournament {
 }
 
 export interface DatabasePlayerWithTournament {
-	challongeId: number;
+	challongeId: string;
 	tournament: {
 		name: string;
 		privateChannels: string[];
@@ -53,7 +53,7 @@ export interface DatabasePlayerWithTournament {
 export interface SynchroniseTournament {
 	name: string;
 	description: string;
-	players: { challongeId: number; discordId: string }[];
+	players: { challongeId: string; discordId: string }[];
 	status?: TournamentStatus;
 	format?: TournamentFormat;
 	participantLimit?: number;

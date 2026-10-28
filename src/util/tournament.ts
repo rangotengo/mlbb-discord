@@ -1,9 +1,10 @@
+import { Mutex } from "async-mutex";
 import { ChallongeTournament } from "../database/orm/ChallongeTournament";
 import { EnrolledPlayer } from "../database/orm/EnrolledPlayer";
 import { MatchSchedule } from "../database/orm/MatchSchedule";
 import { TournamentFormat, TournamentStatus } from "../database/interface";
 import { UserError } from "./errors";
-import { WebsiteWrapperChallonge } from "../website/challonge";
+import { extractTournamentId, tournamentUrl, WebsiteWrapperChallengermode } from "../website/challengermode";
 
 /**
  * Result of adding a tournament.
@@ -12,26 +13,12 @@ export type AddTournamentResult =
 	| { success: false; error: string }
 	| { success: true; challongeId: string; customName: string; url: string; userId: string };
 
-/**
- * Extracts the Challonge tournament ID from a URL.
- *
- * @param url - The Challonge tournament URL
- * @returns The Challonge tournament ID
- * @throws Error if the URL format is invalid
- */
-export function extractChallongeId(url: string): string {
-	// Support various URL formats: https://challonge.com/xyz, http://challonge.com/xyz, challonge.com/xyz
-	const match = url.match(/challonge\.com\/([^/?]+)/);
-	if (!match) {
-		throw new Error("Invalid Challonge URL format");
-	}
-	return match[1];
-}
+export { extractTournamentId } from "../website/challengermode";
 
 /**
- * Adds a tournament to the bot from a Challonge URL.
+ * Adds a tournament to the bot from a Challengermode URL.
  *
- * @param url - The Challonge tournament URL
+ * @param url - The Challengermode tournament URL
  * @param customName - The custom tournament ID for the bot
  * @param guildId - The Discord server ID
  * @param userId - The Discord user ID of the host
@@ -43,34 +30,39 @@ export async function addTournament(
 	guildId: string,
 	userId: string
 ): Promise<AddTournamentResult> {
-	// Validate and extract Challonge ID
+	// Validate and extract Challengermode ID
 	let challongeId: string;
 	try {
-		challongeId = extractChallongeId(url);
+		challongeId = extractTournamentId(url);
 	} catch (e) {
 		return {
 			success: false,
-			error: `Invalid Challonge URL: "${url}". Expected format: https://challonge.com/xyz`
+			error: `Invalid Challengermode URL: "${url}". Expected format: https://www.challengermode.com/s/your-space/tournaments/<uuid>`
 		};
 	}
 
-	// Check if tournament with this custom name already exists
+	customName = customName.trim();
+	if (!customName || customName.length > 50) {
+		return { success: false, error: "Choose a tournament name between 1 and 50 characters." };
+	}
+
+	// tournamentId is the global primary key. Never save over another server's record.
 	const existing = await ChallongeTournament.findOne({
-		where: { tournamentId: customName, owningDiscordServer: guildId }
+		where: { tournamentId: customName }
 	});
 	if (existing) {
 		return {
 			success: false,
-			error: `A tournament with the name "${customName}" already exists in this server.`
+			error: `A tournament with the name "${customName}" is already in use. Please choose a different name.`
 		};
 	}
 
 	// Create the tournament
 	const tournament = new ChallongeTournament();
 	tournament.tournamentId = customName; // Bot's internal ID (custom name)
-	tournament.challongeTournamentId = challongeId; // Actual Challonge ID for API calls
-	tournament.name = customName; // Will be updated when synced with Challonge
-	tournament.description = `Tournament added from Challonge: ${url}`;
+	tournament.challongeTournamentId = challongeId; // Actual Challengermode ID for API calls
+	tournament.name = customName; // Will be updated when synced with Challengermode
+	tournament.description = `Tournament added from Challengermode: ${url}`;
 	tournament.owningDiscordServer = guildId;
 	tournament.hosts = [userId];
 	tournament.format = TournamentFormat.SWISS;
@@ -78,15 +70,23 @@ export async function addTournament(
 	tournament.participantLimit = 0;
 	tournament.publicChannels = [];
 	tournament.privateChannels = [];
-	tournament.autoPushScores = true;
+	tournament.autoPushScores = false;
 
-	await tournament.save();
+	try {
+		// INSERT also protects against simultaneous registrations of the same primary key.
+		await ChallongeTournament.insert(tournament);
+	} catch (error) {
+		if (await ChallongeTournament.existsBy({ tournamentId: customName })) {
+			return { success: false, error: "That tournament name is already in use. Please choose a different name." };
+		}
+		throw error;
+	}
 
 	return {
 		success: true,
 		challongeId,
 		customName,
-		url,
+		url: tournamentUrl(challongeId),
 		userId
 	};
 }
@@ -137,7 +137,7 @@ export async function resolveTournamentId(providedId: string | undefined, guildI
 }
 
 /**
- * Result of syncing a tournament with Challonge.
+ * Result of syncing a tournament with Challengermode.
  */
 export type SyncTournamentResult =
 	| { success: false; error: string }
@@ -154,164 +154,91 @@ export type SyncTournamentResult =
 	};
 
 /**
- * Syncs a tournament with Challonge, including matching players and creating match schedules.
+ * Syncs a tournament with Challengermode, including matching players and creating match schedules.
  * This is a shared utility used by both the webapp and Discord bot.
  *
  * @param tournament - The tournament entity to sync
- * @param challonge - The Challonge API wrapper instance
+ * @param challonge - The Challengermode API wrapper instance
  * @returns The result of the sync operation
  */
-export async function syncTournamentWithChallonge(
+// SQL.js uses one connection; serialise write transactions across tournaments too.
+const syncWrites = new Mutex();
+
+export async function syncTournament(
 	tournament: ChallongeTournament,
-	challonge: WebsiteWrapperChallonge
+	api: Pick<WebsiteWrapperChallengermode, "getTournament" | "getMatches">
 ): Promise<SyncTournamentResult> {
 	try {
-		// Query Challonge API for tournament data
-		const tournamentData = await challonge.getTournament(tournament.challongeTournamentId);
-
-		// Match enrolled players to Challonge participants by team name and store challongeId
-		const enrolledPlayers = await EnrolledPlayer.find({
-			where: { tournamentId: tournament.tournamentId }
-		});
-
-		let matchedCount = 0;
-		for (const enrolled of enrolledPlayers) {
-			// Find matching Challonge participant by team name (case-insensitive)
-			const challongePlayer = tournamentData.players.find(
-				p => p.name.toLowerCase() === enrolled.team.toLowerCase()
-			);
-
-			if (challongePlayer && !enrolled.challongeId) {
-				enrolled.challongeId = challongePlayer.challongeId;
-				await enrolled.save();
-				matchedCount++;
-			}
-		}
-
-		// Sentinel date for unscheduled matches (TypeORM requires non-null Date)
-		const UNSCHEDULED_MATCH_DATE = new Date("2099-12-31T23:59:59Z");
-
-		// Fetch matches from Challonge and create schedule entries
-		const challongeMatches = await challonge.getMatches(tournament.challongeTournamentId);
-
-		// Get existing schedules and create a map for easy lookup
-		const existingSchedules = await MatchSchedule.find({
-			where: { tournamentId: tournament.tournamentId }
-		});
-		const existingScheduleMap = new Map<number, MatchSchedule>();
-		for (const schedule of existingSchedules) {
-			existingScheduleMap.set(schedule.matchId, schedule);
-		}
-
-		// Helper to check if a scheduled time is the sentinel date (not manually set)
-		const isUnscheduledTime = (date: Date): boolean => {
-			return date.getFullYear() === 2099 && date.getMonth() === 11 && date.getDate() === 31;
-		};
-
-		const schedulesToInsert: MatchSchedule[] = [];
-		const schedulesToUpdate: MatchSchedule[] = [];
-		let updatedCount = 0;
-
-		// Process each Challonge match
-		for (const match of challongeMatches) {
-			const existingSchedule = existingScheduleMap.get(match.matchId);
-
-			if (!existingSchedule) {
-				// Create new schedule
-				const schedule = new MatchSchedule();
-				schedule.matchId = match.matchId;
-				schedule.tournamentId = tournament.tournamentId;
-				schedule.scheduledTime = UNSCHEDULED_MATCH_DATE;
-				schedule.roundNumber = match.round;
-				schedule.notified = false;
-				schedule.threadId = null;
-				schedulesToInsert.push(schedule);
-			} else {
-				// Update existing schedule only if fields are missing or time is unscheduled
-				let needsUpdate = false;
-
-				// Update round number if missing
-				if (existingSchedule.roundNumber === null || existingSchedule.roundNumber === undefined) {
-					existingSchedule.roundNumber = match.round;
-					needsUpdate = true;
-				}
-
-				// Update scheduled time only if it's currently the sentinel date (not manually set)
-				if (isUnscheduledTime(existingSchedule.scheduledTime)) {
-					// Keep it as sentinel date - it's already correct
-					// This ensures we don't overwrite manually set times
-				}
-
-				if (needsUpdate) {
-					schedulesToUpdate.push(existingSchedule);
-					updatedCount++;
+		// Keep network calls outside the transaction. A failed read changes no local state.
+		const data = await api.getTournament(tournament.challongeTournamentId);
+		const matches = await api.getMatches(tournament.challongeTournamentId);
+		return await syncWrites.runExclusive(async () => ChallongeTournament.getRepository().manager.transaction(async manager => {
+			const current = await manager.findOneByOrFail(ChallongeTournament, { tournamentId: tournament.tournamentId });
+			const enrolledPlayers = await manager.findBy(EnrolledPlayer, { tournamentId: current.tournamentId });
+			let matchedPlayers = 0;
+			for (const enrolled of enrolledPlayers) {
+				const candidates = data.players.filter(p => p.name.trim().toLowerCase() === enrolled.team.trim().toLowerCase());
+				// Duplicate names must never assign a player to an arbitrary lineup.
+				const player = candidates.length === 1 ? candidates[0] : candidates.find(p => p.challongeId === enrolled.challongeId);
+				if (player && enrolled.challongeId !== player.challongeId) {
+					enrolled.challongeId = player.challongeId;
+					await manager.save(enrolled);
+					matchedPlayers++;
 				}
 			}
-		}
 
-		// Bulk insert new schedules
-		if (schedulesToInsert.length > 0) {
-			await MatchSchedule.save(schedulesToInsert);
-		}
-
-		// Save updated schedules
-		if (schedulesToUpdate.length > 0) {
-			await MatchSchedule.save(schedulesToUpdate);
-		}
-
-		const addedSchedules = schedulesToInsert.length;
-		const skippedSchedules = challongeMatches.length - addedSchedules - updatedCount;
-
-		// Map Challonge state to TournamentStatus
-		let status: TournamentStatus | undefined;
-		if (tournamentData.state) {
-			switch (tournamentData.state) {
-				case "pending":
-					status = TournamentStatus.PREPARING;
-					break;
-				case "underway":
-					status = TournamentStatus.IPR;
-					break;
-				case "complete":
-					status = TournamentStatus.COMPLETE;
-					break;
+			const unscheduled = new Date("2099-12-31T23:59:59Z");
+			const existing = await manager.findBy(MatchSchedule, { tournamentId: current.tournamentId });
+			const schedules = new Map(existing.map(schedule => [schedule.matchId, schedule]));
+			const seen = new Set<string>();
+			let addedSchedules = 0;
+			let updatedSchedules = 0;
+			for (const match of matches) {
+				if (seen.has(match.matchId)) throw new Error("Duplicate fixture in tournament data. Please sync again.");
+				seen.add(match.matchId);
+				const sourceTime = match.scheduledTime ? new Date(match.scheduledTime) : unscheduled;
+				if (!Number.isFinite(sourceTime.getTime())) throw new Error("Invalid fixture time. Please sync again.");
+				const schedule = schedules.get(match.matchId);
+				if (!schedule) {
+					await manager.save(MatchSchedule, manager.create(MatchSchedule, {
+						matchId: match.matchId, tournamentId: current.tournamentId, scheduledTime: sourceTime,
+						roundNumber: match.round, notified: false, threadId: null
+					}));
+					addedSchedules++;
+				} else {
+					let changed = schedule.roundNumber !== match.round;
+					schedule.roundNumber = match.round;
+					if (schedule.scheduledTime.getTime() === unscheduled.getTime() && match.scheduledTime) {
+						schedule.scheduledTime = sourceTime;
+						changed = true;
+					}
+					if (changed) {
+						await manager.save(schedule);
+						updatedSchedules++;
+					}
+				}
 			}
-		}
-
-		// Map Challonge tournament type to TournamentFormat
-		let format: TournamentFormat | undefined;
-		if (tournamentData.format) {
-			// Challonge formats match our enum values exactly
-			format = tournamentData.format as TournamentFormat;
-		}
-
-		// Challonge returns null for signup_cap when there's no limit
-		// We use 0 to indicate no limit in our database
-		const participantLimit = tournamentData.signupCap ?? 0;
-
-		// Update tournament in database
-		tournament.name = tournamentData.name;
-		tournament.description = tournamentData.desc;
-		if (status) tournament.status = status;
-		if (format) tournament.format = format;
-		tournament.participantLimit = participantLimit;
-		await tournament.save();
-
-		return {
-			success: true,
-			matchedPlayers: matchedCount,
-			addedSchedules,
-			updatedSchedules: updatedCount,
-			skippedSchedules,
-			name: tournament.name,
-			status,
-			format,
-			participantLimit
-		};
+			const states = { pending: TournamentStatus.PREPARING, underway: TournamentStatus.IPR, complete: TournamentStatus.COMPLETE };
+			const status = data.state ? states[data.state] : undefined;
+			const format = data.format as TournamentFormat | undefined;
+			const participantLimit = data.signupCap ?? 0;
+			current.lastSyncAttempt = new Date();
+			current.lastSyncSuccess = new Date();
+			current.syncSource = "challengermode";
+			current.name = data.name;
+			current.description = data.desc;
+			if (status) current.status = status;
+			if (format) current.format = format;
+			current.participantLimit = participantLimit;
+			await manager.save(current);
+			return {
+				success: true as const, matchedPlayers, addedSchedules, updatedSchedules,
+				skippedSchedules: matches.length - addedSchedules - updatedSchedules,
+				name: current.name, status, format, participantLimit
+			};
+		}));
 	} catch (error) {
-		return {
-			success: false,
-			error: error instanceof Error ? error.message : "Unknown error during sync"
-		};
+		await ChallongeTournament.update({ tournamentId: tournament.tournamentId }, { lastSyncAttempt: new Date(), syncSource: "challengermode" }).catch(() => undefined);
+		return { success: false, error: error instanceof Error ? error.message : "Unknown error during sync" };
 	}
 }

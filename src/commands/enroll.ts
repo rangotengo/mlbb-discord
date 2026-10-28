@@ -4,7 +4,7 @@ import { isTournamentHost } from "../util/discord";
 import { getLogger } from "../util/logger";
 import { ChallongeTournament } from "../database/orm/ChallongeTournament";
 import { resolveTournamentId } from "../util/tournament";
-import { downloadAndValidateCSV, parseCSVRow } from "../util";
+import { downloadAndValidateCSV, parseCSV } from "../util";
 
 const logger = getLogger("command:enroll");
 
@@ -15,6 +15,7 @@ const command: CommandDefinition = {
 	executor: async (msg, args, support) => {
 		const [providedId, registerFlag] = args;
 		const shouldRegisterToChallonge = registerFlag === "register";
+		if (shouldRegisterToChallonge) support.tournamentApi.assertWritesSupported();
 		const id = await resolveTournamentId(providedId, msg.guildId);
 		const tournament = await support.database.authenticateHost(id, msg.author.id, msg.guildId, undefined, isTournamentHost(msg.member, id));
 
@@ -31,11 +32,11 @@ const command: CommandDefinition = {
 			return;
 		}
 
-		const lines = csvText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+		const lines = parseCSV(csvText);
 
-		const headers = parseCSVRow(lines[0]).map(h => h.toLowerCase());
+		const headers = lines[0].map(h => h.toLowerCase());
 		const emailIdx = headers.findIndex(h => h.includes("email"));
-		const nameIdx = headers.findIndex(h => h.includes("name"));
+		const nameIdx = headers.findIndex(h => ["name", "player name", "playername", "player_name"].includes(h));
 		const teamIdx = headers.findIndex(h => h.includes("team"));
 		const discordUsernameIdx = headers.findIndex(h => h === "discord username" || h === "discordusername" || h === "discord");
 		const discordIdIdx = headers.findIndex(h => h === "discord id" || h === "discordid");
@@ -70,10 +71,10 @@ const command: CommandDefinition = {
 		};
 
 		const enrollments: EnrollmentData[] = [];
-		const teamsToRegister = new Set<string>(); // Teams that need Challonge registration
+		const teamsToRegister = new Set<string>(); // Teams that need Challengermode registration
 
 		for (let i = 1; i < lines.length; i++) {
-			const columns = parseCSVRow(lines[i]);
+			const columns = lines[i];
 			const email = columns[emailIdx];
 			if (!email) continue;
 			const normalizedEmail = email.trim().toLowerCase();
@@ -109,7 +110,7 @@ const command: CommandDefinition = {
 				enrolledPlayer.verified = true;
 			}
 
-			// Track teams that need Challonge registration
+			// Track teams that need Challengermode registration
 			if (shouldRegisterToChallonge && !enrolledPlayer.challongeId && team) {
 				teamsToRegister.add(team);
 			}
@@ -117,27 +118,27 @@ const command: CommandDefinition = {
 			enrollments.push({ email, name, team, discordUsername, discordId, enrolledPlayer, isNew });
 		}
 
-		// Bulk register teams to Challonge in a single API call
-		let challongeIdMap: Map<string, number> | null = null;
+		// Bulk register teams to Challengermode in a single API call
+		let challongeIdMap: Map<string, string> | null = null;
 		if (shouldRegisterToChallonge && teamsToRegister.size > 0) {
 			try {
 				const teamsArray = Array.from(teamsToRegister);
-				logger.verbose(`Bulk registering ${teamsArray.length} teams to Challonge...`);
-				challongeIdMap = await support.challonge.bulkAddParticipants(challongeTournament.getChallongeIdForApi(), teamsArray);
+				logger.verbose(`Bulk registering ${teamsArray.length} teams to Challengermode...`);
+				challongeIdMap = await support.tournamentApi.bulkAddParticipants(challongeTournament.getChallongeIdForApi(), teamsArray);
 				challongeRegisteredCount = challongeIdMap.size;
-				logger.verbose(`Successfully registered ${challongeRegisteredCount} teams to Challonge`);
+				logger.verbose(`Successfully registered ${challongeRegisteredCount} teams to Challengermode`);
 			} catch (err) {
-				logger.warn(`Failed to bulk register teams to Challonge:`, err);
+				logger.warn(`Failed to bulk register teams to Challengermode:`, err);
 			}
 		}
 
-		// Second pass: Save enrollment data with Challonge IDs
+		// Second pass: Save enrollment data with Challengermode IDs
 		for (const enrollment of enrollments) {
 			if (challongeIdMap && enrollment.team && !enrollment.enrolledPlayer!.challongeId) {
 				const challongeId = challongeIdMap.get(enrollment.team);
 				if (challongeId) {
 					enrollment.enrolledPlayer!.challongeId = challongeId;
-					logger.verbose(`Assigned Challonge ID ${challongeId} to team "${enrollment.team}"`);
+					logger.verbose(`Assigned Challengermode ID ${challongeId} to team "${enrollment.team}"`);
 				}
 			}
 			await enrollment.enrolledPlayer!.save();
@@ -145,7 +146,7 @@ const command: CommandDefinition = {
 
 		let responseMsg = `Enrolled data uploaded successfully! Added ${addedCount} new player(s) and updated ${updatedCount} existing record(s) for tournament **${tournament.name}**.`;
 		if (shouldRegisterToChallonge && challongeRegisteredCount > 0) {
-			responseMsg += `\n\n📝 Registered ${challongeRegisteredCount} team(s) to Challonge.`;
+			responseMsg += `\n\n📝 Registered ${challongeRegisteredCount} team(s) to Challengermode.`;
 		}
 		await msg.reply(responseMsg);
 	}

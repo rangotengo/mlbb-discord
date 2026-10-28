@@ -1,12 +1,15 @@
+import { getIdParam } from "../params";
+import { Client } from "discord.js";
 import { Router, Request, Response } from "express";
 import { ChallongeTournament } from "../../database/orm/ChallongeTournament";
 import { EnrolledPlayer } from "../../database/orm/EnrolledPlayer";
 import { MatchSchedule } from "../../database/orm/MatchSchedule";
-import { addTournament, syncTournamentWithChallonge } from "../../util/tournament";
+import { addTournament, syncTournament } from "../../util/tournament";
 import { getLogger } from "../../util/logger";
 import { getBotClient } from "../server";
 import { getConfig } from "../../config";
-import { WebsiteWrapperChallonge } from "../../website/challonge";
+import { getTournamentApi } from "../../website/challengermode";
+import { tournamentChecklist } from "../../services/readiness";
 
 const router = Router();
 const logger = getLogger("web:tournaments");
@@ -14,7 +17,7 @@ const logger = getLogger("web:tournaments");
 /**
  * Helper to safely get the Discord client or null
  */
-function tryGetBotClient() {
+function tryGetBotClient(): Client | null {
 	try {
 		return getBotClient();
 	} catch (e) {
@@ -23,11 +26,6 @@ function tryGetBotClient() {
 }
 
 
-// Helper to safely get string from params
-function getIdParam(params: any): string {
-	const id = params.id;
-	return Array.isArray(id) ? id[0] : id;
-}
 
 // API: Get all tournaments
 router.get("/api/tournaments", async (req: Request, res: Response) => {
@@ -77,6 +75,9 @@ router.get("/api/tournaments", async (req: Request, res: Response) => {
 					verifiedCount,
 					unverifiedCount,
 					checkInDisabled: t.checkInDisabled,
+					lastSyncAttempt: t.lastSyncAttempt ? t.lastSyncAttempt.toISOString() : null,
+					lastSyncSuccess: t.lastSyncSuccess ? t.lastSyncSuccess.toISOString() : null,
+					syncSource: t.syncSource || "challengermode",
 				};
 			})
 		);
@@ -137,6 +138,7 @@ router.get("/api/tournaments/:id", async (req: Request, res: Response) => {
 		const scheduledCount = await MatchSchedule.count({
 			where: { tournamentId: id }
 		});
+		const checklist = await tournamentChecklist(tournament);
 
 		res.json({
 			success: true,
@@ -156,6 +158,10 @@ router.get("/api/tournaments/:id", async (req: Request, res: Response) => {
 				unverifiedCount,
 				scheduledCount,
 				checkInDisabled: tournament.checkInDisabled,
+				lastSyncAttempt: tournament.lastSyncAttempt ? tournament.lastSyncAttempt.toISOString() : null,
+				lastSyncSuccess: tournament.lastSyncSuccess ? tournament.lastSyncSuccess.toISOString() : null,
+				syncSource: tournament.syncSource || "challengermode",
+				checklist,
 			}
 		});
 	} catch (error) {
@@ -284,7 +290,7 @@ router.post("/api/tournaments/:id/toggle-checkin", async (req: Request, res: Res
 	}
 });
 
-// API: Sync tournament with Challonge
+// API: Sync tournament with Challengermode
 router.post("/api/tournaments/:id/sync", async (req: Request, res: Response) => {
 	try {
 		const id = getIdParam(req.params);
@@ -299,10 +305,10 @@ router.post("/api/tournaments/:id/sync", async (req: Request, res: Response) => 
 
 		// Create challonge service instance
 		const config = getConfig();
-		const challonge = new WebsiteWrapperChallonge(config.challongeUsername, config.challongeToken);
+		const challonge = getTournamentApi(config.challengermodeRefreshKey);
 
 		// Use shared sync utility
-		const result = await syncTournamentWithChallonge(tournament, challonge);
+		const result = await syncTournament(tournament, challonge);
 
 		if (!result.success) {
 			return res.status(500).json({ success: false, error: result.error });

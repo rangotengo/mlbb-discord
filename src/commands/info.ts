@@ -1,3 +1,4 @@
+import { tournamentUrl, UUID_PATTERN } from "../website/challengermode";
 import { EmbedBuilder, EmbedField } from "discord.js";
 import { CommandDefinition } from "../Command";
 import { ChallongeTournament } from "../database/orm";
@@ -32,10 +33,11 @@ export function createTournamentEmbed(tournament: ChallongeTournament): EmbedBui
 	const hosts = tournament.hosts.map(snowflake => `<@${snowflake}>`).join(" ");
 	fields.push({ name: ":smile: Hosts", value: hosts, inline: true });
 	const embed = new EmbedBuilder()
-		.setURL(`https://challonge.com/${tournament.tournamentId}`)
 		.setTitle(`**${tournament.name}**`)
 		.setFields(fields)
 		.setFooter({ text: "Tournament details as of request time" });
+
+	if (UUID_PATTERN.test(tournament.challongeTournamentId)) embed.setURL(tournamentUrl(tournament.challongeTournamentId));
 
 	// Only set description if it exists and is not empty
 	if (tournament.description) {

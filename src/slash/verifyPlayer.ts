@@ -6,14 +6,14 @@ import { EnrolledPlayer } from "../database/orm/EnrolledPlayer";
 import { ParticipantRoleProvider } from "../role/participant";
 import { assignParticipantRole, addUserToMatchThreads } from "../util";
 import { getLogger, Logger } from "../util/logger";
-import { WebsiteWrapperChallonge } from "../website/challonge";
+import { WebsiteWrapperChallengermode } from "../website/challengermode";
 
 export class VerifyPlayerCommand extends SlashCommand<"cached"> {
 	#logger = getLogger("slash:verifyPlayer");
 	#participantRoleProvider: ParticipantRoleProvider;
-	#challonge: WebsiteWrapperChallonge;
+	#challonge: WebsiteWrapperChallengermode;
 
-	constructor(participantRoleProvider: ParticipantRoleProvider, challonge: WebsiteWrapperChallonge) {
+	constructor(participantRoleProvider: ParticipantRoleProvider, challonge: WebsiteWrapperChallengermode) {
 		super();
 		this.#participantRoleProvider = participantRoleProvider;
 		this.#challonge = challonge;

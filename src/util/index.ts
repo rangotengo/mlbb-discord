@@ -23,12 +23,13 @@ export function serialiseInteraction(
 }
 
 export function splitText(text: string, maxLength = 2000): string[] {
+	if (!Number.isSafeInteger(maxLength) || maxLength <= 0) throw new RangeError("maxLength must be a positive integer");
 	if (text.length <= maxLength) return [text];
 	const parts = [];
 	let remaining = text;
 	while (remaining.length > maxLength) {
 		let splitAt = remaining.lastIndexOf('\n', maxLength);
-		if (splitAt === -1) splitAt = maxLength;
+		if (splitAt <= 0) splitAt = maxLength;
 		parts.push(remaining.substring(0, splitAt));
 		remaining = remaining.substring(splitAt).trimStart();
 	}
@@ -38,7 +39,7 @@ export function splitText(text: string, maxLength = 2000): string[] {
 
 export { parseDateTime } from "./parseDateTime";
 export { parseTime } from "./parseTime";
-export { downloadAndValidateCSV, parseCSVRow } from "./csv";
+export { downloadAndValidateCSV, parseCSVRow, parseCSV, formatCSVRow, formatCSVDate } from "./csv";
 export { isTournamentOrganizer, isTournamentHost, parseUserMention } from "./discord";
 export { getParticipantRoleName, assignParticipantRole } from "./roles";
 export * from "./constants";
@@ -52,9 +53,12 @@ export { addUserToMatchThreads } from "./matchThreads";
  * @throws {UserError} If format is invalid
  */
 export function parseScore(score: string): [number, number] {
-	const scores = score.split("-").map(s => parseInt(s, 10));
-	if (scores.length < 2 || scores.some(s => isNaN(s))) {
+	if (!/^\d+-\d+$/.test(score.trim())) {
 		throw new UserError("Must provide score in format `#-#` e.g. `2-1`.");
+	}
+	const scores = score.trim().split("-").map(Number);
+	if (scores.some(s => !Number.isSafeInteger(s))) {
+		throw new UserError("Scores must be safe non-negative integers.");
 	}
 	return [scores[0], scores[1]];
 }

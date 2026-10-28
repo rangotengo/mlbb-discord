@@ -10,7 +10,7 @@ const command: CommandDefinition = {
 	name: "pingteam",
 	requiredArgs: ["teamName"],
 	optionalArgs: ["tournamentId", "...message"],
-	executor: async (msg, args, support) => {
+	executor: async (msg, args) => {
 		// Permission check
 		if (!isTournamentHost(msg.member, args[0] || "")) {
 			await msg.reply("❌ Only Tournament Organizers can use this command.");

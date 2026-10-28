@@ -20,20 +20,21 @@ export async function downloadAndValidateCSV(
 		throw new UserError("Please attach a CSV file.");
 	}
 
-	if (!attachment.name?.endsWith(".csv")) {
+	if (!attachment.name?.toLowerCase().endsWith(".csv")) {
 		throw new UserError("The attached file must be a CSV.");
 	}
 
 	let csvText: string;
 	try {
-		const res = await fetch(attachment.url);
+		const res = await fetch(attachment.url, { signal: AbortSignal.timeout(30_000) });
+		if (!res.ok) throw new Error(`HTTP ${res.status}`);
 		csvText = await res.text();
 	} catch (err) {
 		logger.error("Failed to download CSV attachment:", err);
 		throw new UserError("Failed to download the CSV file.");
 	}
 
-	const lines = csvText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+	const lines = parseCSV(csvText);
 	if (lines.length < minRows) {
 		throw new UserError(`The CSV file must contain at least ${minRows} rows (including header).`);
 	}
@@ -48,22 +49,55 @@ export async function downloadAndValidateCSV(
  * @returns Array of column values
  */
 export function parseCSVRow(row: string): string[] {
-	// Strip Windows-style carriage returns before parsing
-	row = row.replace(/\r/g, "");
-	const values: string[] = [];
+	const rows = parseCSV(row);
+	if (rows.length > 1) throw new UserError("Expected one CSV record.");
+	return rows[0] ?? [""];
+}
+
+/** Parses CSV records, including escaped quotes, embedded newlines, CRLF, and a UTF-8 BOM. */
+export function parseCSV(text: string): string[][] {
+	const rows: string[][] = [];
+	let values: string[] = [];
 	let current = "";
-	let inQuotes = false;
-	for (let i = 0; i < row.length; i++) {
-		const char = row[i];
-		if (char === '"') {
-			inQuotes = !inQuotes;
-		} else if (char === ',' && !inQuotes) {
-			values.push(current.trim());
-			current = "";
-		} else {
-			current += char;
-		}
+	let quoted = false;
+	let closed = false;
+	const input = text.replace(/^\uFEFF/, "");
+	const field = (): void => { values.push(current.trim()); current = ""; closed = false; };
+	const record = (): void => {
+		field();
+		if (values.some(value => value !== "")) rows.push(values);
+		values = [];
+	};
+	for (let i = 0; i < input.length; i++) {
+		const char = input[i];
+		if (quoted) {
+			if (char === '"' && input[i + 1] === '"') { current += '"'; i++; }
+			else if (char === '"') { quoted = false; closed = true; }
+			else current += char;
+		} else if (char === ',') field();
+		else if (char === '\n' || char === '\r') {
+			if (char === '\r' && input[i + 1] === '\n') i++;
+			record();
+		} else if (char === '"') {
+			if (current.trim() || closed) throw new UserError("Invalid quote in CSV field.");
+			current = ""; quoted = true;
+		} else if (closed && !/\s/.test(char)) throw new UserError("Unexpected text after a quoted CSV field.");
+		else current += char;
 	}
-	values.push(current.trim());
-	return values;
+	if (quoted) throw new UserError("Unclosed quote in CSV file.");
+	if (current || values.length || closed) record();
+	return rows;
+}
+
+export function formatCSVRow(values: (string | number | null | undefined)[]): string {
+	return values.map(value => {
+		const text = String(value ?? "");
+		return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+	}).join(",");
+}
+
+/** Schedule exports use UTC consistently and leave unscheduled sentinel dates blank. */
+export function formatCSVDate(date: Date | undefined | null): string {
+	if (!date || !Number.isFinite(date.getTime()) || date.getUTCFullYear() >= 2090) return "";
+	return date.toISOString().slice(0, 19).replace("T", " ");
 }

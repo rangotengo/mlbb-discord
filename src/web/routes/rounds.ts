@@ -1,12 +1,14 @@
+import { resolveTeamMembers } from "../../util/teams";
+import { getBotClient } from "../server";
+import { getIdParam } from "../params";
 import { Router, Request, Response } from "express";
 import { ChallongeTournament } from "../../database/orm/ChallongeTournament";
 import { EnrolledPlayer } from "../../database/orm/EnrolledPlayer";
 import { MatchSchedule } from "../../database/orm/MatchSchedule";
 import { getLogger } from "../../util/logger";
-import { In } from "typeorm";
 import { getConfig } from "../../config";
-import { WebsiteWrapperChallonge } from "../../website/challonge";
-import { ChannelType, ThreadAutoArchiveDuration } from "discord.js";
+import { getTournamentApi } from "../../website/challengermode";
+import { Client, ChannelType, ThreadAutoArchiveDuration } from "discord.js";
 import { OrganiserRoleProvider } from "../../role/organiser";
 import { HostRoleProvider } from "../../role/host";
 
@@ -14,19 +16,14 @@ const router = Router();
 const logger = getLogger("web:rounds");
 
 // Helper to safely get the Discord client or null
-function tryGetBotClient() {
+function tryGetBotClient(): Client | null {
 	try {
-		return require("../../web/server").getBotClient();
+		return getBotClient();
 	} catch (e) {
 		return null;
 	}
 }
 
-// Helper to safely get string from params
-function getIdParam(params: any, key: string = 'id'): string {
-	const id = params[key];
-	return Array.isArray(id) ? id[0] : id;
-}
 
 // Helper to validate tournament exists
 async function validateTournament(tournamentId: string): Promise<ChallongeTournament | null> {
@@ -142,20 +139,7 @@ router.post("/api/tournaments/:id/rounds/:round/start", async (req: Request, res
 			where: { tournamentId, verified: true }
 		});
 
-		// Build lookup maps
-		const teamMap = new Map<string, EnrolledPlayer[]>();
-		const nameMap = new Map<string, EnrolledPlayer>();
-		for (const player of enrolledPlayers) {
-			if (player.team) {
-				if (!teamMap.has(player.team)) {
-					teamMap.set(player.team, []);
-				}
-				teamMap.get(player.team)!.push(player);
-			}
-			if (player.name) {
-				nameMap.set(player.name, player);
-			}
-		}
+
 
 		// Get schedules for this round
 		const schedules = await MatchSchedule.find({
@@ -172,14 +156,14 @@ router.post("/api/tournaments/:id/rounds/:round/start", async (req: Request, res
 			});
 		}
 
-		// Get Challonge data for player names
+		// Get Challengermode data for player names
 		const config = getConfig();
-		const challonge = new WebsiteWrapperChallonge(config.challongeUsername, config.challongeToken);
+		const challonge = getTournamentApi(config.challengermodeRefreshKey);
 		const players = await challonge.getPlayers(tournament.challongeTournamentId);
 		const challongeMatches = await challonge.getMatches(tournament.challongeTournamentId);
 
 		// Create player map for lookups
-		const playerMap = new Map<number, typeof players[0]>();
+		const playerMap = new Map<string, typeof players[0]>();
 		for (const player of players) {
 			playerMap.set(player.challongeId, player);
 		}
@@ -224,7 +208,7 @@ router.post("/api/tournaments/:id/rounds/:round/start", async (req: Request, res
 		if (undeterminedTeams.length > 0) {
 			return res.status(400).json({
 				success: false,
-				error: `⚠️ **Teams Not Determined**\n\nThe following matches in Round ${roundNumber} have undetermined opponents. Please update the bracket in Challonge first:\n\n${undeterminedTeams.join("\n")}`
+				error: `⚠️ **Teams Not Determined**\n\nThe following matches in Round ${roundNumber} have undetermined opponents. Please update the bracket in Challengermode first:\n\n${undeterminedTeams.join("\n")}`
 			});
 		}
 
@@ -251,7 +235,7 @@ router.post("/api/tournaments/:id/rounds/:round/start", async (req: Request, res
 
 		for (const schedule of roundSchedules) {
 			try {
-				// Get match data from Challonge for player names
+				// Get match data from Challengermode for player names
 				const matchData = challongeMatches.find(m => m.matchId === schedule.matchId);
 				const p1Challonge = (matchData?.player1) ? playerMap.get(matchData.player1) : null;
 				const p2Challonge = (matchData?.player2) ? playerMap.get(matchData.player2) : null;
@@ -275,8 +259,8 @@ router.post("/api/tournaments/:id/rounds/:round/start", async (req: Request, res
 				};
 
 				// Get player mentions for this match (use team name to find enrolled players)
-				const p1Mentions = getMentions(teamMap.get(p1Name) || []);
-				const p2Mentions = getMentions(teamMap.get(p2Name) || []);
+				const p1Mentions = getMentions(resolveTeamMembers(enrolledPlayers, p1Challonge));
+				const p2Mentions = getMentions(resolveTeamMembers(enrolledPlayers, p2Challonge));
 
 				// Format scheduled time
 				let scheduledTimeText = "";
@@ -362,7 +346,7 @@ router.get("/api/tournaments/:id/rounds", async (req: Request, res: Response) =>
 			});
 		}
 
-		// Build set of round numbers, using Challonge data as fallback
+		// Build set of round numbers, using Challengermode data as fallback
 		const roundSet = new Set<number>();
 
 		// First, add any round numbers from database
@@ -372,11 +356,11 @@ router.get("/api/tournaments/:id/rounds", async (req: Request, res: Response) =>
 			}
 		}
 
-		// If no rounds found in database, try fetching from Challonge
+		// If no rounds found in database, try fetching from Challengermode
 		if (roundSet.size === 0) {
 			try {
 				const config = getConfig();
-				const challonge = new WebsiteWrapperChallonge(config.challongeUsername, config.challongeToken);
+				const challonge = getTournamentApi(config.challengermodeRefreshKey);
 				const challongeMatches = await challonge.getMatches(tournament.challongeTournamentId);
 
 				// Get round numbers for matches that have schedules
@@ -387,7 +371,7 @@ router.get("/api/tournaments/:id/rounds", async (req: Request, res: Response) =>
 					}
 				}
 			} catch (error) {
-				logger.warn("Failed to fetch rounds from Challonge:", error);
+				logger.warn("Failed to fetch rounds from Challengermode:", error);
 			}
 		}
 
@@ -397,7 +381,7 @@ router.get("/api/tournaments/:id/rounds", async (req: Request, res: Response) =>
 		if (uniqueRounds.length === 0) {
 			return res.status(400).json({
 				success: false,
-				error: "No round numbers found. Please sync with Challonge first."
+				error: "No round numbers found. Please sync with Challengermode first."
 			});
 		}
 
@@ -432,13 +416,13 @@ router.get("/api/tournaments/:id/channels", async (req: Request, res: Response) 
 		}
 
 		const channels = guild.channels.cache
-			.filter((ch: any) => ch.type === 0 /* GuildText */)
-			.map((ch: any) => ({
+			.filter(ch => ch !== null && ch.type === ChannelType.GuildText)
+			.map((ch) => ({
 				id: ch.id,
 				name: ch.name,
 				type: ch.name
 			}))
-			.sort((a: any, b: any) => a.name.localeCompare(b.name));
+			.sort((a, b) => a.name.localeCompare(b.name));
 
 		res.json({ success: true, data: channels });
 	} catch (error) {

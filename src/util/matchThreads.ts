@@ -3,7 +3,7 @@ import { MatchSchedule } from "../database/orm/MatchSchedule";
 import { EnrolledPlayer } from "../database/orm/EnrolledPlayer";
 import { ChallongeTournament } from "../database/orm/ChallongeTournament";
 import { Not, IsNull } from "typeorm";
-import { WebsitePlayer, WebsiteWrapperChallonge } from "../website/challonge";
+import { WebsitePlayer, WebsiteWrapperChallengermode } from "../website/challengermode";
 import { getLogger } from "./logger";
 
 const logger = getLogger("matchThreads");
@@ -15,16 +15,16 @@ const logger = getLogger("matchThreads");
  *
  * @param guild - The Discord guild
  * @param player - The newly verified enrolled player
- * @param challongeService - The Challonge service for fetching match data
+ * @param challongeService - The Challengermode service for fetching match data
  * @returns Number of threads the user was added to
  */
 export async function addUserToMatchThreads(
 	guild: Guild,
 	player: EnrolledPlayer,
-	challongeService: WebsiteWrapperChallonge
+	challongeService: WebsiteWrapperChallengermode
 ): Promise<number> {
-	if (!player.discordId) {
-		logger.warn(`Cannot add to threads: player ${player.name} has no discordId`);
+	if (!player.discordId || !player.verified) {
+		logger.warn(`Cannot add to threads: player ${player.name} has no verified Discord identity`);
 		return 0;
 	}
 
@@ -35,12 +35,12 @@ export async function addUserToMatchThreads(
 			return 0;
 		}
 
-		// Find the tournament to get Challonge info
+		// Find the tournament to get Challengermode info
 		const tournament = await ChallongeTournament.findOne({
 			where: { tournamentId: player.tournamentId }
 		});
 
-		if (!tournament) {
+		if (!tournament || tournament.owningDiscordServer !== guild.id) {
 			logger.warn(`Cannot add to threads: tournament ${player.tournamentId} not found`);
 			return 0;
 		}
@@ -65,11 +65,11 @@ export async function addUserToMatchThreads(
 			return 0;
 		}
 
-		// Get matches from Challonge to find which matches involve this player
+		// Get matches from Challengermode to find which matches involve this player
 		const allMatches = await challongeService.getMatches(tournament.challongeTournamentId, false);
 		const allPlayers = await challongeService.getPlayers(tournament.challongeTournamentId);
 
-		// Find the player's Challonge ID - prefer stored challongeId, fallback to name matching
+		// Find the player's Challengermode ID - prefer stored challongeId, fallback to name matching
 		let playerChallonge: WebsitePlayer | undefined;
 
 		// First try to match by stored challongeId (most reliable)
@@ -82,17 +82,16 @@ export async function addUserToMatchThreads(
 
 		// Fallback to name/team matching if no challongeId or not found
 		if (!playerChallonge) {
-			playerChallonge = allPlayers.find((p: WebsitePlayer) => {
-				// Match by player name first, then by team name
-				return p.name === player.name || (player.team && p.name === player.team);
-			});
+			const name = (player.team || player.name || "").trim().toLowerCase();
+			const candidates = allPlayers.filter(p => p.name.trim().toLowerCase() === name);
+			playerChallonge = candidates.length === 1 ? candidates[0] : undefined;
 			if (playerChallonge) {
 				logger.verbose(`Found player ${player.name} by name/team matching`);
 			}
 		}
 
 		if (!playerChallonge) {
-			logger.warn(`Could not find player ${player.name} (team: ${player.team}, challongeId: ${player.challongeId}) in Challonge participants. Available names: ${allPlayers.map(p => p.name).join(", ")}`);
+			logger.warn(`Could not find player ${player.name} (team: ${player.team}, challongeId: ${player.challongeId}) in Challengermode participants. Available names: ${allPlayers.map(p => p.name).join(", ")}`);
 			return 0;
 		}
 
@@ -130,11 +129,12 @@ export async function addUserToMatchThreads(
 				// Add the user to the thread
 				await thread.members.add(member.id, `User ${player.name} verified after thread creation`);
 
+				addedCount++;
+
 				// Send a mention message so the user gets notified
 				await thread.send(`👋 <@${member.id}> has been verified for **${player.team || player.name}** and added to this match thread (Round ${tournament.activeRound}).`);
 
 				logger.info(`Added ${player.name} to thread ${thread.name}`);
-				addedCount++;
 
 			} catch (err) {
 				logger.error(`Failed to add ${player.name} to thread ${schedule.threadId}:`, err);

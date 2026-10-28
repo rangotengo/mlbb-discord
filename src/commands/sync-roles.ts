@@ -79,7 +79,7 @@ const command: CommandDefinition = {
 
 		try {
 			// Fetch verified players
-			const whereClause: any = { verified: true };
+			const whereClause: { verified: boolean; tournamentId?: string } = { verified: true };
 			if (targetTournamentId) {
 				whereClause.tournamentId = targetTournamentId;
 			}
@@ -165,7 +165,7 @@ const command: CommandDefinition = {
 
 						// Add user to match threads if they were missed
 						try {
-							const threadsAdded = await addUserToMatchThreads(guild, player, support.challonge);
+							const threadsAdded = await addUserToMatchThreads(guild, player, support.tournamentApi);
 							if (threadsAdded > 0) {
 								totalThreadsAdded += threadsAdded;
 								logger.info(`Added ${player.name} to ${threadsAdded} match thread(s)`);
@@ -206,7 +206,7 @@ const command: CommandDefinition = {
 			} else if (failures.length > 10) {
 				embed.addFields({
 					name: "Failures (first 10)",
-					value: failures.slice(0, 10).join("\n") + `\n...and ${failures.length - 10} more`,
+					value: `${failures.slice(0, 10).join("\n")  }\n...and ${failures.length - 10} more`,
 					inline: false
 				});
 			}

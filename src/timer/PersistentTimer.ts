@@ -1,6 +1,5 @@
 import { time } from "@discordjs/builders";
 import { DiscordAPIError, RESTJSONErrorCodes } from "discord.js";
-import { getConnection } from "typeorm";
 import { Countdown } from "../database/orm";
 import { getLogger } from "../util/logger";
 
@@ -47,9 +46,10 @@ export class PersistentTimer {
 		cronIntervalSeconds: number,
 		tournamentId?: string
 	): Promise<PersistentTimer> {
-		if (end <= new Date()) {
+		if (!Number.isFinite(end.getTime()) || end <= new Date()) {
 			throw new Error("Timer end time must be in the future");
 		}
+		if (!Number.isSafeInteger(cronIntervalSeconds) || cronIntervalSeconds <= 0) throw new Error("Timer update interval must be a positive integer");
 		const message = PersistentTimer.timerMessage(end);
 		const messageId = await discord.sendMessage(channelId, message);
 
@@ -83,7 +83,7 @@ export class PersistentTimer {
 
 		// Prune expired timers after initializing the active ones
 		try {
-			await getConnection().transaction(async entityManager => {
+			await Countdown.getRepository().manager.transaction(async entityManager => {
 				for (const entity of entities) {
 					if (entity.end.getTime() <= nowMilli) {
 						// Send final message for expired timers before removing from database
@@ -126,6 +126,7 @@ export class PersistentTimer {
 
 	/// Only to be called by setInterval
 	protected async tick(): Promise<void> {
+		if (!this.isActive()) return;
 		const end = this.entity.end;
 		const now = new Date();
 		const iso = now.toISOString();
@@ -140,6 +141,7 @@ export class PersistentTimer {
 			} catch (error) {
 				logger.warn(error);
 			}
+			return;
 		}
 		// Tick every minute if more than three minutes remain. Within three minutes, tick every five seconds.
 		// This is due to Discord rate limits.

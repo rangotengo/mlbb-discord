@@ -11,9 +11,9 @@ export class MatchSchedule extends BaseEntity {
 	@PrimaryGeneratedColumn()
 	id!: number;
 
-	/// Challonge match ID
-	@Column()
-	matchId!: number;
+	/// Challengermode match ID
+	@Column({ type: "varchar", length: 64 })
+	matchId!: string;
 
 	/// Tournament identifier - foreign key to ChallongeTournament
 	@Column({ length: 50 })

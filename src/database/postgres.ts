@@ -1,4 +1,4 @@
-import { getConnection, IsNull, Not } from "typeorm";
+import { IsNull, Not } from "typeorm";
 import { EnrolledPlayer } from "./orm";
 import {
 	AssertStatusError,
@@ -109,8 +109,7 @@ export class DatabaseWrapperPostgres {
 	}
 
 	async startTournament(tournamentId: string): Promise<void> {
-		await getConnection()
-			.createQueryBuilder()
+		await ChallongeTournament.createQueryBuilder()
 			.update(ChallongeTournament)
 			.set({
 				status: TournamentStatus.IPR
@@ -136,11 +135,11 @@ export class DatabaseWrapperPostgres {
 		return tournaments.map(t => this.wrap(t));
 	}
 
-	async getConfirmedPlayer(discordId: string, tournamentId: string): Promise<{ challongeId: number }> {
+	async getConfirmedPlayer(discordId: string, tournamentId: string): Promise<{ challongeId: string }> {
 		const enrolledPlayer = await EnrolledPlayer.findOne({
 			where: { discordId, tournamentId }
 		});
-		if (!enrolledPlayer || !enrolledPlayer.challongeId) {
+		if (!enrolledPlayer || !enrolledPlayer.verified || !enrolledPlayer.challongeId) {
 			throw new UnauthorisedPlayerError(discordId, tournamentId);
 		}
 		return { challongeId: enrolledPlayer.challongeId };
@@ -159,7 +158,7 @@ export class DatabaseWrapperPostgres {
 			const enrolledPlayer = await EnrolledPlayer.findOne({
 				where: { challongeId: player.challongeId, tournamentId }
 			});
-			if (enrolledPlayer) {
+			if (enrolledPlayer && player.discordId !== "DUMMY") {
 				enrolledPlayer.discordId = player.discordId;
 				await enrolledPlayer.save();
 			}

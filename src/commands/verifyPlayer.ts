@@ -64,16 +64,25 @@ const command: CommandDefinition = {
 			return;
 		}
 
-		// Check if already verified to different user
-		if (enrolledPlayer.verified && enrolledPlayer.discordId !== userId) {
-			const warnEmbed = new EmbedBuilder()
-				.setTitle("⚠️ Already Verified")
-				.setDescription(`Player ${enrolledPlayer.name} (${email}) is already verified as <@${enrolledPlayer.discordId}>.\n\nDo you want to reassign to <@${userId}>?`)
-				.setColor("#FF9900");
-
-			await msg.reply({ embeds: [warnEmbed] });
-			// For simplicity, we'll require them to use a different flow or contact support
-			return;
+		// Refuse to silently replace an existing verified account link (guide 1.4).
+		// Reassignment requires an explicit override flag after staff review.
+		if (enrolledPlayer.verified && enrolledPlayer.discordId && enrolledPlayer.discordId !== userId) {
+			const override = args[3]?.toLowerCase() === "override";
+			if (!override) {
+				const warnEmbed = new EmbedBuilder()
+					.setTitle("⚠️ Already Verified to Another Account")
+					.setDescription(
+						`Player ${enrolledPlayer.name} (${email}) is already verified as <@${enrolledPlayer.discordId}>.\n\n` +
+						`To reassign to <@${userId}>, run the same command with \`override\` as the final argument. ` +
+						"The reassignment is recorded in the audit trail."
+					)
+					.setColor("#FF9900");
+				await msg.reply({ embeds: [warnEmbed] });
+				return;
+			}
+			logger.notify(
+				`Organiser ${msg.author.id} reassigned enrolment ${enrolledPlayer.id} (${email}) from ${enrolledPlayer.discordId} to ${userId}`
+			);
 		}
 
 		// Get mentioned user
@@ -89,10 +98,15 @@ const command: CommandDefinition = {
 			return;
 		}
 
-		// Update database
+		// Record identity as an audited organiser action, then provision access
+		// separately so a role failure does not undo the organiser's decision.
 		enrolledPlayer.verified = true;
+		enrolledPlayer.identityVerified = true;
+		enrolledPlayer.identityVerifiedAt = new Date();
+		enrolledPlayer.identityVerifiedBy = msg.author.id;
 		enrolledPlayer.discordId = member.id;
 		enrolledPlayer.discordUsername = member.user.username;
+		enrolledPlayer.accessPending = true;
 		await enrolledPlayer.save();
 
 		logger.info(`Manually verified ${member.user.tag} as ${enrolledPlayer.name} (${email}) for tournament ${tournament.tournamentId}`);
@@ -100,12 +114,15 @@ const command: CommandDefinition = {
 		// Assign participant role
 		const participantRoleAssigned = await assignParticipantRole(member, enrolledPlayer.tournament, logger, support.participantRole);
 		if (!participantRoleAssigned) {
-			await msg.reply(`⚠️ Verified ${enrolledPlayer.name}, but failed to assign participant role. Please create the role or use \`!set-participant-role\`.`);
+			await msg.reply(`⚠️ Identity verified for ${enrolledPlayer.name}, but the participant role could not be assigned. Create the role or use \`!set-participant-role\`, then have the participant run \`!check-in\` to retry without re-verification.`);
 			return;
 		}
 
+		enrolledPlayer.accessPending = false;
+		await enrolledPlayer.save();
+
 		// Add user to existing match threads if verification happened after thread creation
-		await addUserToMatchThreads(msg.guild, enrolledPlayer, support.challonge);
+		await addUserToMatchThreads(msg.guild, enrolledPlayer, support.tournamentApi);
 
 		// Build success message
 		const successMsg = `✅ Successfully verified ${member} as **${enrolledPlayer.name}** from team **${enrolledPlayer.team || "No team"}**!`;

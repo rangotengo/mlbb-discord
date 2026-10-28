@@ -16,6 +16,7 @@ const command: CommandDefinition = {
 	requiredArgs: ["score"],
 	optionalArgs: ["id"],
 	executor: async (msg, args, support) => {
+		if (!support.tournamentApi.supportsWrites) support.tournamentApi.assertWritesSupported();
 		if (isTournamentOrganizer(msg.member)) {
 			await msg.reply(`You are a Tournament Organizer. Please use the \`!forcescore\` command instead of \`!score\`.`);
 			return;
@@ -65,14 +66,14 @@ const command: CommandDefinition = {
 			throw new UserError("You do not have an assigned team. Please contact a Tournament Organizer.");
 		}
 
-		const challongePlayers = await support.challonge.getPlayers(enrolledPlayer.tournament.getChallongeIdForApi());
+		const challongePlayers = await support.tournamentApi.getPlayers(enrolledPlayer.tournament.getChallongeIdForApi());
 		const ourTeamOnChallonge = challongePlayers.find(p => p.name.toLowerCase() === teamName.toLowerCase());
 
 		if (!ourTeamOnChallonge) {
-			throw new UserError(`Could not find team **${teamName}** on the Challonge bracket. Please ensure your team name matches exactly.`);
+			throw new UserError(`Could not find team **${teamName}** on the Challengermode bracket. Please ensure your team name matches exactly.`);
 		}
 
-		const match = await findMatch(enrolledPlayer.tournament.getChallongeIdForApi(), ourTeamOnChallonge.challongeId, support.challonge);
+		const match = await findMatch(enrolledPlayer.tournament.getChallongeIdForApi(), ourTeamOnChallonge.challongeId, support.tournamentApi);
 		
 		if (!match) {
 			log("no match", { team: teamName, challongeId: ourTeamOnChallonge.challongeId });
@@ -143,11 +144,11 @@ const command: CommandDefinition = {
 
 			if (autoPush) {
 				try {
-					await support.challonge.submitScore(tDB!.challongeTournamentId, match, winner, winnerScore, loserScore);
+					await support.tournamentApi.submitScore(tDB!.challongeTournamentId, match, winner, winnerScore, loserScore);
 					await prompt.reply("✅ Score has been automatically pushed to the bracket!");
 				} catch (err) {
 					logger.error("Error submitting score automatically:", err);
-					await prompt.reply("❌ Error submitting score to Challonge. Please ask a TO to do it manually.");
+					await prompt.reply("❌ Error submitting score to Challengermode. Please ask a TO to do it manually.");
 				}
 			} else {
 				await prompt.reply("✅ Score approved! It has been sent to the Tournament Organizers for final review before appearing on the bracket.");

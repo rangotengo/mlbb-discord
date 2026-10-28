@@ -1,7 +1,5 @@
 import { Router, Request, Response } from "express";
 import { EnrolledPlayer } from "../../database/orm/EnrolledPlayer";
-import { ChallongeTournament } from "../../database/orm/ChallongeTournament";
-import { Like } from "typeorm";
 import { getLogger } from "../../util/logger";
 
 const router = Router();
@@ -10,59 +8,52 @@ const logger = getLogger("web:players");
 // API: Search players across all tournaments
 router.get("/api/players/search", async (req: Request, res: Response) => {
 	try {
-		const { email, discordUsername, tournamentId } = req.query;
-
-		// Build where conditions
-		const whereConditions: any = {};
-
-		if (email && typeof email === "string") {
-			whereConditions.email = Like(`%${email}%`);
-		}
-
-		if (discordUsername && typeof discordUsername === "string") {
-			whereConditions.discordUsername = Like(`%${discordUsername}%`);
-		}
-
-		if (tournamentId && typeof tournamentId === "string") {
-			whereConditions.tournamentId = tournamentId;
-		}
-
-		// Fetch players with their tournaments
-		const players = await EnrolledPlayer.find({
-			where: whereConditions,
-			relations: ["tournament"],
-		});
-
-		// Sort manually by tournament name, then team name
-		players.sort((a, b) => {
-			const aTournamentName = a.tournament?.name || "";
-			const bTournamentName = b.tournament?.name || "";
-			if (aTournamentName !== bTournamentName) {
-				return aTournamentName.localeCompare(bTournamentName);
+		const page = Math.max(1, Number(req.query.page) || 1);
+		const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 25));
+		const filters = ["1=1"];
+		const values: Record<string, string> = {};
+		const add = (sql: string, key: string, value: unknown): void => {
+			if (typeof value === "string" && value.trim()) {
+				filters.push(sql);
+				values[key] = value.trim();
 			}
-			return a.team.localeCompare(b.team);
-		});
+		};
+		add("LOWER(player.email) LIKE LOWER(:email)", "email", typeof req.query.email === "string" ? `%${req.query.email}%` : undefined);
+		add("LOWER(player.discordUsername) LIKE LOWER(:discordUsername)", "discordUsername", typeof req.query.discordUsername === "string" ? `%${req.query.discordUsername}%` : undefined);
+		add("player.discordId = :discordId", "discordId", req.query.discordId);
+		add("LOWER(player.team) LIKE LOWER(:team)", "team", typeof req.query.team === "string" ? `%${req.query.team}%` : undefined);
+		add("player.tournamentId = :tournamentId", "tournamentId", req.query.tournamentId);
+		if (req.query.verified === "true" || req.query.verified === "false") {
+			filters.push("player.verified = :verified");
+			values.verified = req.query.verified === "true" ? "1" : "0";
+		}
 
-		// Transform response
-		const data = players.map((p) => ({
+		const query = EnrolledPlayer.createQueryBuilder("player")
+			.leftJoinAndSelect("player.tournament", "tournament")
+			.where(filters.join(" AND "), values)
+			.orderBy("tournament.name", "ASC")
+			.addOrderBy("player.team", "ASC")
+			.addOrderBy("player.id", "ASC");
+		const total = await query.getCount();
+		const players = await query.skip((page - 1) * limit).take(limit).getMany();
+		const mask = (address: string): string => {
+			const [local, domain] = address.split("@");
+			if (!domain || local.length < 2) return "***";
+			return `${local[0]}***${local[local.length - 1]}@${domain}`;
+		};
+		const data = players.map(p => ({
 			id: p.id,
-			email: p.email,
+			email: mask(p.email),
 			name: p.name,
 			team: p.team,
 			discordUsername: p.discordUsername,
 			discordId: p.discordId,
 			verified: p.verified,
 			challongeId: p.challongeId,
-			tournament: p.tournament ? {
-				id: p.tournament.tournamentId,
-				name: p.tournament.name,
-			} : null,
+			tournament: p.tournament ? { id: p.tournament.tournamentId, name: p.tournament.name } : null,
 		}));
 
-		res.json({
-			success: true,
-			data,
-		});
+		res.json({ success: true, data, total, page, limit, pages: Math.ceil(total / limit), emailMasked: true });
 	} catch (error) {
 		logger.error("Failed to search players:", error);
 		res.status(500).json({ success: false, error: "Failed to search players" });

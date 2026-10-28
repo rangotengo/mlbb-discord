@@ -39,7 +39,7 @@ export function makeHandler(_support: CommandSupport) {
 				return;
 			}
 
-			let enrolledPlayers: EnrolledPlayer[] = [];
+			const enrolledPlayers: EnrolledPlayer[] = [];
 			if (tournamentIds.length > 0) {
 				for (const tournamentId of tournamentIds) {
 					const playersForTournament = await EnrolledPlayer.find({
@@ -86,7 +86,7 @@ export function makeHandler(_support: CommandSupport) {
 						}
 
 						// Add user to existing match threads
-						const threadsAdded = await addUserToMatchThreads(member.guild, matchedPlayer, _support.challonge);
+						const threadsAdded = await addUserToMatchThreads(member.guild, matchedPlayer, _support.tournamentApi);
 						if (threadsAdded > 0) {
 							logger.info(`Added ${member.user.tag} to ${threadsAdded} match thread(s) via guild join`);
 						}
@@ -103,7 +103,7 @@ export function makeHandler(_support: CommandSupport) {
 					}
 
 					// Also try to add to match threads in case they were missed
-					const threadsAdded = await addUserToMatchThreads(member.guild, matchedPlayer, _support.challonge);
+					const threadsAdded = await addUserToMatchThreads(member.guild, matchedPlayer, _support.tournamentApi);
 					if (threadsAdded > 0) {
 						logger.info(`Added ${member.user.tag} to ${threadsAdded} match thread(s) via guild join (already verified)`);
 					}

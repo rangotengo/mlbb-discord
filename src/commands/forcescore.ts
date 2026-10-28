@@ -15,6 +15,7 @@ const command: CommandDefinition = {
 	requiredArgs: ["score"],
 	optionalArgs: ["id"],
 	executor: async (msg, args, support) => {
+		if (!support.tournamentApi.supportsWrites) support.tournamentApi.assertWritesSupported();
 		let providedId: string | undefined;
 		let score: string;
 
@@ -54,11 +55,11 @@ const command: CommandDefinition = {
 			throw new UserError(`${player} isn't playing in **${tournament.name}**.`);
 		}
 		// can also find open matches, just depends on current round
-		const match = await findClosedMatch(tournament.challongeTournamentId, challongeId, support.challonge);
+		const match = await findClosedMatch(tournament.challongeTournamentId, challongeId, support.tournamentApi);
 		if (!match) {
 			throw new UserError(`Could not find an open match in **${tournament.name}** including ${player}.`);
 		}
-		await support.challonge.submitScore(tournament.challongeTournamentId, match, challongeId, scores[0], scores[1]);
+		await support.tournamentApi.submitScore(tournament.challongeTournamentId, match, challongeId, scores[0], scores[1]);
 		const cleared = support.scores.get(id)?.delete(challongeId); // Remove any pending participant-submitted score.
 		logger.verbose(
 			JSON.stringify({

@@ -1,8 +1,7 @@
 import { CommandDefinition } from "../Command";
 import { isTournamentHost } from "../util/discord";
 import { getLogger } from "../util/logger";
-import { resolveTournamentId, syncTournamentWithChallonge } from "../util/tournament";
-import { assertTournamentNotComplete } from "../util/errors";
+import { resolveTournamentId, syncTournament } from "../util/tournament";
 import { ChallongeTournament } from "../database/orm/ChallongeTournament";
 
 const logger = getLogger("command:sync");
@@ -14,7 +13,7 @@ const command: CommandDefinition = {
 	executor: async (msg, args, support) => {
 		const [providedId] = args;
 		const id = await resolveTournamentId(providedId, msg.guildId);
-		const tournament = await support.database.authenticateHost(id, msg.author.id, msg.guildId, undefined, isTournamentHost(msg.member, id));
+		await support.database.authenticateHost(id, msg.author.id, msg.guildId, undefined, isTournamentHost(msg.member, id));
 		logger.verbose(
 			JSON.stringify({
 				channel: msg.channelId,
@@ -25,7 +24,6 @@ const command: CommandDefinition = {
 				event: "attempt"
 			})
 		);
-		assertTournamentNotComplete(tournament.name, tournament.status);
 
 		// Fetch the full tournament entity for the shared utility
 		const fullTournament = await ChallongeTournament.findOne({
@@ -38,10 +36,10 @@ const command: CommandDefinition = {
 		}
 
 		// Use shared sync utility
-		const result = await syncTournamentWithChallonge(fullTournament, support.challonge);
+		const result = await syncTournament(fullTournament, support.tournamentApi);
 
 		if (!result.success) {
-			await msg.reply(`Failed to sync with Challonge: ${result.error}`);
+			await msg.reply(`Failed to sync with Challengermode: ${result.error}`);
 			return;
 		}
 
