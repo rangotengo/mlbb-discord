@@ -1,235 +1,146 @@
-# DiscordDot MLBB - Visual Flow Diagrams
+# Flow diagrams
 
-## Player Verification Flow
+[Back to main](../README.md) · [User flows](USER_FLOWS.md) · [Command reference](commands.md)
+
+ASCII diagrams for the flows the bot implements today. The integration with Challengermode is
+read-only: scores and registration happen on the platform, never through the bot.
+
+## Participant verification flow
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         PLAYER VERIFICATION                          │
-└─────────────────────────────────────────────────────────────────────┘
-
-                              !check-in
-                                  │
-                                  ▼
-                    ┌─────────────────────────┐
-                    │  Check enrolled players │
-                    │  by username/name      │
-                    │  (local database)      │
-                    └───────────┬─────────────┘
-                                │
-                    ┌───────────▼─────────────┐
-                    │    Match found?         │
-                    └───────────┬─────────────┘
-                                │
-                ┌───────────────┴───────────────┐
-                │ YES                           │ NO
-                ▼                               ▼
-    ┌───────────────────────┐       ┌──────────────────┐
-    │ Auto-verify!         │       │ Create Ticket    │
-    │ Grant Participant    │       │ Channel          │
-    │ Role                 │       └────────┬─────────┘
-    └───────────────────────┘                │
+                              !check-in  (server channel)
+                                    │
+                                    ▼
+                      ┌───────────────────────────┐
+                      │ Previously verified       │
+                      │ Discord user ID?          │
+                      └─────────────┬─────────────┘
+                          yes │         │ no (or suggested name match)
+                              ▼         ▼
+              ┌──────────────────┐  ┌────────────────────────┐
+              │ Restore access    │  │ Create private ticket  │
+              │ (role + threads); │  │ channel ticket-<user>  │
+              │ retry if pending  │  └───────────┬────────────┘
+              └──────────────────┘              │
                                                 ▼
-                                      ┌─────────────────┐
-                                      │ In ticket:      │
-                                      │ !email       │
-                                      │ <address>       │
-                                      └────────┬─────────┘
-                                               │
-                                               ▼
-                                      ┌─────────────────┐
-                                      │ Send OTP Email  │
-                                      └────────┬─────────┘
-                                               │
-                                               ▼
-                                      ┌─────────────────┐
-                                      │ !verify      │
-                                      │ <otp>           │
-                                      └────────┬─────────┘
-                                               │
-                                               ▼
-                                      ┌─────────────────┐
-                                      │ Verify OTP      │
-                                      │ Grant Role      │
-                                      └─────────────────┘
+                                    ┌────────────────────────┐
+                                    │ !email <address>       │
+                                    │ (in ticket; 10m expiry,│
+                                    │  60s cd, max 3 sends)  │
+                                    └───────────┬────────────┘
+                                                │ code emailed (accepted by provider)
+                                                ▼
+                                    ┌────────────────────────┐
+                                    │ !verify <6-digit code> │
+                                    │ (in the same ticket)   │
+                                    └───────────┬────────────┘
+                                                │
+                                    confirm identity (DB)
+                                    + grant role & thread membership
+                                                │
+                                                ▼
+                                    ┌────────────────────────┐
+                                    │ All enrolments pass?   │
+                                    └───────────┬────────────┘
+                                        yes │       │ no / role pending
+                                            ▼       ▼
+                             ┌──────────────────┐  ┌──────────────────┐
+                             │ Ticket auto-     │  │ Ticket stays     │
+                             │ closes in 5s     │  │ open for staff   │
+                             └──────────────────┘  └──────────────────┘
 
+  Failures at any box have a recovery path: see TROUBLESHOOTING.md
 ```
 
-## Score Reporting Flow
+## Organiser setup flow
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-                          SCORE REPORTING                             │
-└─────────────────────────────────────────────────────────────────────┘
-
-                        Player: !score ID 2-1
-                                  │
-                                  ▼
-                    ┌─────────────────────────┐
-                    │  Bot posts score report │
-                    │  Pings opponent         │
-                    └───────────┬─────────────┘
-                                │
-                    ┌───────────▼─────────────┐
-                    │  Opponent clicks button │
-                    └───────────┬─────────────┘
-                                │
-                ┌───────────────┴───────────────┐
-                │ Approve                       │ Reject
-                ▼                               ▼
-    ┌───────────────────────┐       ┌──────────────────┐
-    │ Mark as approved      │       │ Mark rejected    │
-    │ Check autoPush setting│       │ Players discuss  │
-    └───────────┬───────────┘       │ and resubmit     │
-                │                    └──────────────────┘
-    ┌───────────┴─────────────┐
-    │ autoPush = true        │ autoPush = false
-    ▼                          ▼
-┌──────────────────┐   ┌──────────────────┐
-│ Submit to        │   │ Send to review   │
-│ Challonge        │   │ channel          │
-│ ✓ Complete!      │   │ TO approves      │
-└──────────────────┘   │ via button       │
-                       └──────────────────┘
-
-    (10 min timeout = auto-approve)
-
+  TO configures Challengermode refresh key  (docs/CHALLENGERMODE_SETUP.md)
+                                    │
+                                    ▼
+         !add <challengermode-url> <name>          (TO role; auto-syncs)
+                                    │
+                                    ▼
+         Register teams on Challengermode          (platform, not the bot)
+                                    │
+                                    ▼
+         !enroll [id]  + players.csv               (host; local enrolment)
+         name,email,team[,discord]; team names match Challengermode
+                                    │
+                                    ▼
+         !matches [id] download                    (match series UUIDs)
+         !schedule [id]  + schedule.csv            (host; in-progress only)
+         match_id,scheduled_time,timezone          (stored as UTC)
+                                    │
+                                    ▼
+         Check-in open?  dashboard toggle          (open by default)
+                                    │
+                                    ▼
+         Players verify                            (see diagram above)
+                                    │
+                                    ▼
+         !status [id]                              (verified/total per team)
 ```
 
-## Tournament Organizer Setup Flow
+## Round management flow
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-                    TOURNAMENT ORGANIZER SETUP                         │
-└─────────────────────────────────────────────────────────────────────┘
-
-                   1. Create on Challonge
-                            │
-                            ▼
-                   2. Prepare CSV (email, name, team)
-                            │
-                            ▼
-              ┌─────────────────────────────┐
-              │  !enroll ID [attach CSV] │
-              └─────────────┬───────────────┘
-                            │
-                            ▼
-              ┌─────────────────────────────┐
-              │  Players enrolled in DB     │
-              └─────────────┬───────────────┘
-                            │
-                            ▼
-              ┌─────────────────────────────┐
-              │  Add teams to Challonge     │
-              │  bracket manually           │
-              │  (team names, not players)  │
-              └─────────────┬───────────────┘
-                            │
-                            ▼
-              ┌─────────────────────────────┐
-              │  Players run !check-in      │
-              │  to verify via username     │
-              └─────────────┬───────────────┘
-                            │
-                            ▼
-              ┌─────────────────────────────┐
-              │  !addhost ID @cohost     │
-              │  (optional)                 │
-              └─────────────────────────────┘
-
+                   !round [id] <#channel> <round>          (host)
+                                    │
+                                    ▼
+                      ┌───────────────────────────┐
+                      │ Fetch round's open matches │
+                      │ from Challengermode        │
+                      └─────────────┬─────────────┘
+                                    ▼
+                      ┌───────────────────────────┐
+                      │ Every fixture scheduled?   │──no──▶ reply listing
+                      └─────────────┬─────────────┘        missing times;
+                          yes │                               fix and retry
+                              ▼
+                  Confirm & Start  /  Cancel    (5-minute prompt)
+                              │ confirm
+                              ▼
+              ┌───────────────────────────────────────┐
+              │ Per fixture: private thread            │
+              │ "Team One vs Team Two", mentions of    │
+              │ verified players, scheduled time,      │
+              │ thread recorded against the schedule   │
+              └─────────────┬─────────────────────────┘
+                                    ▼
+                     Play the match; report the result
+                     ON CHALLENGERMODE (not via the bot)
+                                    │
+                                    ▼
+                     !sync [id]  refreshes standings
+                     and fixtures; next round repeats
 ```
 
-## Round Management Flow
+## Recovery flow
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-                        ROUND MANAGEMENT                              │
-└─────────────────────────────────────────────────────────────────────┘
-
-                   !round ID #channel 1
-                            │
-                            ▼
-              ┌─────────────────────────────┐
-              │  Fetch matches from         │
-              │  Challonge for round        │
-              └─────────────┬───────────────┘
-                            │
-                            ▼
-              ┌─────────────────────────────┐
-              │  Show preview of matches    │
-              │  Confirm / Cancel buttons   │
-              └─────────────┬───────────────┘
-                            │
-                            │ (Confirm)
-                            ▼
-              ┌─────────────────────────────┐
-              │  Create thread per match    │
-              │  Ping verified players      │
-              └─────────────┬───────────────┘
-                            │
-                            ▼
-              ┌─────────────────────────────┐
-              │  Players use !score      │
-              │  in their match threads     │
-              └─────────────────────────────┘
-
+                    A command fails
+                          │
+                          ▼
+            ┌─────────────────────────┐
+            │ Which failure?          │
+            └────────────┬────────────┘
+     │            │             │            │
+     ▼            ▼             ▼            ▼
+ usage/usage   tournament     provider      internal
+ error         not found      (Challermo-  error
+ (bad args,    (no/many       mode rate    (logged;
+  no perms)    tournaments)   limit/outage) reply "try
+     │            │             │            later")
+     ▼            ▼             ▼            ▼
+ bot replies   bot lists      bot replies   check
+ with the     tournaments    "something    /system and
+ exact fix    or asks for    went wrong    logs; then
+               the id        with         TROUBLE-
+                             Challenger-   SHOOTING.md
+                             mode"
 ```
 
-## Command Access Matrix
+---
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-                         COMMAND ACCESS                               │
-└─────────────────────────────────────────────────────────────────────┘
-
-                    ┌─────────┬─────────┬─────────┐
-                    │ Player  │ Host    │ TO      │
-Command             │         │         │         │
-─────────────────────────────────────────────────────────────────────
-!check-in           │    ✓    │         │         │
-!email           │    ✓    │         │         │
-!verify          │    ✓    │         │         │
-!score           │    ✓    │         │    ✗    │
-!coin            │    ✓    │    ✓    │    ✓    │
-!toss            │    ✓    │    ✓    │    ✓    │ (alias for coin)
-!forcescore      │         │         │    ✓    │
-!enroll          │         │         │    ✓    │
-!sync            │         │    ✓    │    ✓    │
-!update          │         │    ✓    │    ✓    │
-!addhost         │         │         │    ✓    │
-!removehost      │         │         │    ✓    │
-!list            │         │         │    ✓    │
-!info            │    ✓    │    ✓    │    ✓    │
-!round           │         │    ✓    │    ✓    │
-!close           │         │         │    ✓    │
-!help            │    ✓    │    ✓    │    ✓    │
-                    └─────────┴─────────┴─────────┘
-
-Legend: ✓ = Can use | Empty = Cannot use
-```
-
-## Error Recovery Flow
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-                          ERROR HANDLING                              │
-└─────────────────────────────────────────────────────────────────────┘
-
-                    Command Error Occurs
-                            │
-                            ▼
-              ┌─────────────────────────────┐
-              │  Error Type?                │
-              └─────────────┬───────────────┘
-                            │
-    ┌───────────┬───────────┼───────────┬───────────┐
-    │           │           │           │           │
-    ▼           ▼           ▼           ▼           ▼
-UserError   Challonge   FetchError  Other      Success
-    │           │           │           │           │
-    ▼           ▼           ▼           ▼           ▼
-Reply with   Reply with  Reply with  Log error   Continue
-message      "try again" "try again" & alert    flow
-            │           │           TO
-            └───────────┴───────────┘
-
-```
+[Back to main](../README.md)
