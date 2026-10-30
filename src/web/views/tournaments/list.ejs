@@ -1,9 +1,12 @@
-<div class="tournaments-page">
+<div class="tournaments-page page-wide">
 	<div class="page-header">
-		<h2 class="page-title">Tournaments</h2>
-		<div style="display: flex; gap: 10px; align-items: center;">
-			<button class="btn btn-warning" id="btn-disable-all-checkin" onclick="toggleAllCheckIn()">🔒 Disable All Check-in</button>
-			<button class="btn btn-primary" onclick="showCreateModal()">+ Create Tournament</button>
+		<div>
+			<h2 class="page-title">Tournaments</h2>
+			<p class="page-subtitle">Create a bracket, then sync it from Challonge.</p>
+		</div>
+		<div class="header-actions">
+			<button class="btn btn-secondary" id="btn-disable-all-checkin" onclick="toggleAllCheckIn()">Check-in for all</button>
+			<button class="btn btn-primary" onclick="showCreateModal()">New tournament</button>
 		</div>
 	</div>
 
@@ -75,91 +78,7 @@
 
 
 
-<style>
-.tournaments-page {
-	max-width: 1200px;
-}
 
-.page-header {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	margin-bottom: 24px;
-}
-
-.filters {
-	display: flex;
-	gap: 8px;
-	margin-bottom: 16px;
-	flex-wrap: wrap;
-}
-
-.filter-btn {
-	padding: 8px 16px;
-	background: var(--bg-tertiary);
-	border: 1px solid var(--border);
-	border-radius: var(--radius-sm);
-	color: var(--text-secondary);
-	cursor: pointer;
-	transition: all var(--transition-normal);
-}
-
-.filter-btn:hover {
-	background: var(--bg-secondary);
-	color: var(--text-primary);
-}
-
-.filter-btn.active {
-	background: var(--accent);
-	color: white;
-	border-color: var(--accent);
-}
-
-.search-input {
-	flex: 1;
-	min-width: 200px;
-	padding: 8px 12px;
-	background: var(--bg-tertiary);
-	border: 1px solid var(--border);
-	border-radius: var(--radius-sm);
-	color: var(--text-primary);
-}
-
-.search-input:focus {
-	outline: none;
-	border-color: var(--accent);
-}
-
-.loading-row {
-	text-align: center;
-	padding: 40px !important;
-	color: var(--text-secondary);
-}
-
-.status-badge {
-	display: inline-block;
-}
-
-.empty-state {
-	text-align: center;
-	padding: 60px 20px;
-	color: var(--text-secondary);
-}
-
-.empty-state-icon {
-	font-size: 48px;
-	margin-bottom: 16px;
-}
-
-.empty-state-text {
-	font-size: 16px;
-	margin-bottom: 8px;
-}
-
-.empty-state-help {
-	font-size: 14px;
-}
-</style>
 
 <%- contentFor('script') %>
 <script>
@@ -257,15 +176,18 @@ function renderTournaments() {
 			</td>
 			<td><span class="badge badge-${getStatusBadgeClass(t.status)}">${t.status}</span></td>
 			<td>${t.format || '—'}</td>
-			<td style="color: var(--success);">${t.verifiedCount || 0}</td>
-			<td style="color: var(--warning);">${t.unverifiedCount || 0}</td>
+			<td class="num-ok">${t.verifiedCount || 0}</td>
+			<td class="num-warn">${t.unverifiedCount || 0}</td>
 			<td>
-				<div class="action-buttons">
-					<button class="btn btn-sm btn-primary" onclick="syncTournament('${t.id}', '${escapeHtml(t.name)}')">Sync</button>
-					<a href="/tournaments/${t.id}" class="btn btn-sm btn-secondary">View</a>
-					<button class="btn btn-sm ${t.checkInDisabled ? 'btn-success' : 'btn-warning'}" onclick="toggleCheckIn('${t.id}')">${t.checkInDisabled ? '🔓 Enable' : '🔒 Disable'} Check-in</button>
-					<button class="btn btn-sm btn-danger" onclick="deleteTournament('${t.id}')">Delete</button>
-				</div>
+				<details class="row-menu">
+					<summary aria-label="Actions">···</summary>
+					<div class="row-menu-panel">
+						<a href="/tournaments/${t.id}">Open</a>
+						<button type="button" onclick="syncTournament('${t.id}', '${escapeHtml(t.name)}')">Sync from Challonge</button>
+						<button type="button" onclick="toggleCheckIn('${t.id}')">${t.checkInDisabled ? 'Enable check-in' : 'Disable check-in'}</button>
+						<button type="button" class="menu-danger" onclick="deleteTournament('${t.id}')">Delete</button>
+					</div>
+				</details>
 			</td>
 		</tr>
 	`).join('');

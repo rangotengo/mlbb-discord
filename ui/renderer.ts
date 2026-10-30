@@ -116,7 +116,7 @@ function setupIPCHandlers(): void {
     // Reset submit button depending on status
     const submitBtn = configForm.querySelector('button[type="submit"]') as HTMLButtonElement;
     if (submitBtn) {
-      submitBtn.textContent = statusText.textContent === 'Running' ? 'Save & Restart Bot' : 'Save & Start Bot';
+      submitBtn.textContent = statusText.textContent === 'Running' ? 'Save and restart' : 'Save and start';
       submitBtn.disabled = false;
     }
   });
@@ -154,10 +154,10 @@ function showConfigScreen(): void {
   
   if (isRunning) {
     backFromConfigBtn.classList.remove('hidden');
-    if (submitBtn) submitBtn.textContent = 'Save & Restart Bot';
+    if (submitBtn) submitBtn.textContent = 'Save and restart';
   } else {
     backFromConfigBtn.classList.add('hidden');
-    if (submitBtn) submitBtn.textContent = 'Save & Start Bot';
+    if (submitBtn) submitBtn.textContent = 'Save and start';
   }
 }
 
@@ -271,7 +271,7 @@ function handleConfigSubmit(e: Event): void {
 
   // Show loading state
   if (submitBtn) {
-    submitBtn.textContent = statusText.textContent === 'Running' ? 'Restarting...' : 'Starting...';
+    submitBtn.textContent = statusText.textContent === 'Running' ? 'Restarting…' : 'Starting…';
     submitBtn.disabled = true;
   }
 
@@ -307,7 +307,7 @@ function updateStatus(status: BotStatus): void {
     // Reset submit button if it was in loading state
     const submitBtn = document.querySelector('#config-form button[type="submit"]') as HTMLButtonElement;
     if (submitBtn && submitBtn.disabled) {
-      submitBtn.textContent = 'Save & Restart Bot';
+      submitBtn.textContent = 'Save and restart';
       submitBtn.disabled = false;
     }
   } else {
@@ -318,7 +318,7 @@ function updateStatus(status: BotStatus): void {
     // If we're on config screen, also reset the submit button text
     const submitBtn = document.querySelector('#config-form button[type="submit"]') as HTMLButtonElement;
     if (submitBtn && !submitBtn.disabled) {
-      submitBtn.textContent = 'Save & Start Bot';
+      submitBtn.textContent = 'Save and start';
     }
   }
 }
@@ -378,7 +378,7 @@ function handleCopyUrl(e: Event): void {
       navigator.clipboard.writeText(urlElement.textContent || '');
       const btn = e.currentTarget as HTMLElement;
       const originalText = btn.textContent;
-      btn.textContent = '✓ Copied!';
+      btn.textContent = 'Copied';
       setTimeout(() => {
         btn.textContent = originalText;
       }, 2000);

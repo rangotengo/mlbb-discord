@@ -64,7 +64,7 @@ function setupIPCHandlers() {
         // Reset submit button depending on status
         const submitBtn = configForm.querySelector('button[type="submit"]');
         if (submitBtn) {
-            submitBtn.textContent = statusText.textContent === 'Running' ? 'Save & Restart Bot' : 'Save & Start Bot';
+            submitBtn.textContent = statusText.textContent === 'Running' ? 'Save and restart' : 'Save and start';
             submitBtn.disabled = false;
         }
     });
@@ -98,12 +98,12 @@ function showConfigScreen() {
     if (isRunning) {
         backFromConfigBtn.classList.remove('hidden');
         if (submitBtn)
-            submitBtn.textContent = 'Save & Restart Bot';
+            submitBtn.textContent = 'Save and restart';
     }
     else {
         backFromConfigBtn.classList.add('hidden');
         if (submitBtn)
-            submitBtn.textContent = 'Save & Start Bot';
+            submitBtn.textContent = 'Save and start';
     }
 }
 function showDashboard() {
@@ -117,7 +117,7 @@ function populateConfigForm(config) {
     document.getElementById('challonge-token').value = config.challonge.token;
     document.getElementById('bot-prefix').value = config.bot.defaultPrefix;
     document.getElementById('bot-to-role').value = config.bot.defaultToRole;
-    document.getElementById('web-password').value = config.web?.password || '';
+    document.getElementById('web-password').value = config.web.password || '';
 }
 function restoreFormFromStorage() {
     try {
@@ -180,7 +180,11 @@ function handleConfigSubmit(e) {
             defaultToRole: document.getElementById('bot-to-role').value
         },
         database: { type: 'sqlite', path: 'C:/mlbb-data/database/dot.db' },
-        web: { port: 3000, autoIncrement: true, password: document.getElementById('web-password').value },
+        web: {
+            port: 3000,
+            autoIncrement: true,
+            password: document.getElementById('web-password').value || undefined
+        },
         logging: { level: 'info' }
     };
     // Validation
@@ -198,7 +202,7 @@ function handleConfigSubmit(e) {
     }
     // Show loading state
     if (submitBtn) {
-        submitBtn.textContent = statusText.textContent === 'Running' ? 'Restarting...' : 'Starting...';
+        submitBtn.textContent = statusText.textContent === 'Running' ? 'Restarting…' : 'Starting…';
         submitBtn.disabled = true;
     }
     // Don't show dashboard yet - wait for bot-status event
@@ -229,7 +233,7 @@ function updateStatus(status) {
         // Reset submit button if it was in loading state
         const submitBtn = document.querySelector('#config-form button[type="submit"]');
         if (submitBtn && submitBtn.disabled) {
-            submitBtn.textContent = 'Save & Restart Bot';
+            submitBtn.textContent = 'Save and restart';
             submitBtn.disabled = false;
         }
     }
@@ -241,7 +245,7 @@ function updateStatus(status) {
         // If we're on config screen, also reset the submit button text
         const submitBtn = document.querySelector('#config-form button[type="submit"]');
         if (submitBtn && !submitBtn.disabled) {
-            submitBtn.textContent = 'Save & Start Bot';
+            submitBtn.textContent = 'Save and start';
         }
     }
 }
@@ -293,7 +297,7 @@ function handleCopyUrl(e) {
             navigator.clipboard.writeText(urlElement.textContent || '');
             const btn = e.currentTarget;
             const originalText = btn.textContent;
-            btn.textContent = '✓ Copied!';
+            btn.textContent = 'Copied';
             setTimeout(() => {
                 btn.textContent = originalText;
             }, 2000);

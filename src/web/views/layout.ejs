@@ -3,7 +3,7 @@
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title><%= title %> - Dot Tournament Admin</title>
+	<title><%= title %> - Dot</title>
 	<link rel="stylesheet" href="/css/reset.css">
 	<link rel="stylesheet" href="/css/variables.css">
 	<link rel="stylesheet" href="/css/layout.css">
@@ -14,29 +14,28 @@
 	<div class="app-container">
 		<header class="header">
 			<div class="header-left">
-				<h1 class="logo">Dot Tournament Admin</h1>
+				<h1 class="logo"><span class="logo-mark" aria-hidden="true">D</span>Dot</h1>
 			</div>
 			<div class="header-right">
-				<div class="status-indicator">
-					<span class="status-dot"></span>
-					<span class="status-text">System Online</span>
-				</div>
+				<span class="page-subtitle" style="margin: 0;">Tournament admin</span>
 			</div>
 		</header>
 
 		<div class="main-layout">
 			<nav class="sidebar">
+				<div class="sidebar-section">Run</div>
 				<a href="/tournaments" class="nav-item <%= path.startsWith('/tournaments') ? 'active' : '' %>">
 					<span class="nav-label">Tournaments</span>
 				</a>
 				<a href="/players" class="nav-item <%= path === '/players' ? 'active' : '' %>">
-					<span class="nav-label">Player Search</span>
+					<span class="nav-label">Players</span>
 				</a>
+				<div class="sidebar-section">Advanced</div>
 				<a href="/system" class="nav-item <%= path === '/system' ? 'active' : '' %>">
-					<span class="nav-label">System Status</span>
+					<span class="nav-label">Status</span>
 				</a>
 				<a href="/config" class="nav-item <%= path === '/config' ? 'active' : '' %>">
-					<span class="nav-label">Configuration</span>
+					<span class="nav-label">Settings</span>
 				</a>
 			</nav>
 

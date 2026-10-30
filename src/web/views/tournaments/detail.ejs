@@ -11,7 +11,9 @@
 			</div>
 		</div>
 		<div class="header-actions">
-			<button class="btn btn-secondary" onclick="window.location.href='/tournaments'">Back to List</button>
+			<a class="btn btn-secondary" href="/tournaments">All tournaments</a>
+			<button class="btn btn-secondary" id="btn-sync" onclick="syncTournament()">Sync from Challonge</button>
+			<button class="btn btn-primary" id="btn-start-round" onclick="openStartRoundModal()">Start round</button>
 		</div>
 	</div>
 
@@ -27,17 +29,17 @@
 		</div>
 		<div class="info-card">
 			<div class="info-label">Verified Teams</div>
-			<div class="info-value" id="t-verified-count" style="color: var(--success);">&mdash;</div>
+			<div class="info-value num-ok" id="t-verified-count">&mdash;</div>
 		</div>
 		<div class="info-card">
 			<div class="info-label">Unverified Teams</div>
-			<div class="info-value" id="t-unverified-count" style="color: var(--warning);">&mdash;</div>
+			<div class="info-value num-warn" id="t-unverified-count">&mdash;</div>
 		</div>
 	</div>
 
 	<!-- Tabs Container -->
-	<div class="detail-tabs" style="display: flex; justify-content: space-between; align-items: center;">
-		<div style="display: flex; gap: 16px;">
+	<div class="detail-tabs">
+		<div class="detail-tabs-nav">
 			<button class="tab-btn active" data-tab="participants" onclick="switchTab('participants')">
 				Participants (<span id="t-p-count">0</span>)
 			</button>
@@ -45,25 +47,11 @@
 				Schedules (<span id="t-s-count">0</span>)
 			</button>
 		</div>
-		<div style="display: flex; gap: 12px;">
-			<button class="btn btn-primary" id="btn-start-round" onclick="openStartRoundModal()">
-				<span class="btn-icon">
-					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-				</span>
-				Start Round
-			</button>
-			<button class="btn btn-warning" id="btn-toggle-checkin" onclick="toggleCheckIn()">
-				<span class="btn-icon">
-					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-				</span>
-				🔒 Disable Check-in
-			</button>
-			<button class="btn btn-primary" id="btn-sync" onclick="syncTournament()">
-				<span class="btn-icon">
-					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
-				</span>
-				Sync from Challonge
-			</button>
+		<div class="detail-actions">
+			<label class="checkin-switch">
+				<input type="checkbox" id="checkin-enabled" onchange="toggleCheckIn()">
+				<span id="checkin-label">Check-in on</span>
+			</label>
 		</div>
 	</div>
 
@@ -76,7 +64,7 @@
 			<button class="btn btn-primary" onclick="openCSVImportModal('participants')">
 				<span class="btn-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span> Import CSV
 			</button>
-			<button class="help-link" style="background: none; border: none; padding: 0;" onclick="openCSVFormatModal('participants')">CSV Format Guide</button>
+			<button class="help-link" onclick="openCSVFormatModal('participants')">CSV Format Guide</button>
 		</div>
 		<div class="table-container">
 			<table class="table">
@@ -106,7 +94,7 @@
 			<button class="btn btn-primary" onclick="openCSVImportModal('schedules')">
 				<span class="btn-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span> Import CSV
 			</button>
-			<button class="help-link" style="background: none; border: none; padding: 0;" onclick="openCSVFormatModal('schedules')">CSV Format Guide</button>
+			<button class="help-link" onclick="openCSVFormatModal('schedules')">CSV Format Guide</button>
 		</div>
 		<div class="table-container">
 			<table class="table">
@@ -1022,20 +1010,15 @@ function renderInfo(t) {
 	document.getElementById('t-p-count').textContent = t.enrolledCount || 0;
 	document.getElementById('t-s-count').textContent = t.scheduledCount || 0;
 
-	// Check-in toggle button state
-	const checkInBtn = document.getElementById('btn-toggle-checkin');
-	if (checkInBtn) {
-		if (t.checkInDisabled) {
-			checkInBtn.className = 'btn btn-success';
-			checkInBtn.innerHTML = `<span class="btn-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span> 🔓 Enable Check-in`;
-		} else {
-			checkInBtn.className = 'btn btn-warning';
-			checkInBtn.innerHTML = `<span class="btn-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span> 🔒 Disable Check-in`;
-		}
+	const checkInBox = document.getElementById('checkin-enabled');
+	const checkInLabel = document.getElementById('checkin-label');
+	if (checkInBox) {
+		checkInBox.checked = !t.checkInDisabled;
+		checkInBox.dataset.ready = '1';
+		if (checkInLabel) checkInLabel.textContent = t.checkInDisabled ? 'Check-in off' : 'Check-in on';
 	}
-}
 
-function getStatusBadgeClass(status) {
+	function getStatusBadgeClass(status) {
 	switch (status) {
 		case 'preparing': return 'warning';
 		case 'in progress': return 'info';
@@ -1149,21 +1132,22 @@ async function syncTournament() {
 
 // Toggle check-in for this tournament
 async function toggleCheckIn() {
-	const btn = document.getElementById('btn-toggle-checkin');
-	if (btn) btn.disabled = true;
+	const box = document.getElementById('checkin-enabled');
+	if (box && box.dataset.ready !== '1') return;
+	if (box) box.disabled = true;
 	try {
 		const result = await Dot.API.post(`/api/tournaments/${tournamentId}/toggle-checkin`);
 		const disabled = result.checkInDisabled;
-		Dot.Toast.success(`Check-in ${disabled ? 'disabled \ud83d\udd12' : 'enabled \ud83d\udd13'} for this tournament.`);
+		Dot.Toast.success(`Check-in ${disabled ? 'disabled' : 'enabled'} for this tournament.`);
 		await loadTournamentData();
 	} catch (error) {
 		console.error('Failed to toggle check-in:', error);
 		Dot.Toast.error('Failed to toggle check-in.');
+		if (box) box.checked = !box.checked;
 	} finally {
-		if (btn) btn.disabled = false;
+		if (box) box.disabled = false;
 	}
 }
-
 
 function escapeHtml(text) {
 	if (!text) return '';

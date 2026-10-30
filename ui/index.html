@@ -4,81 +4,105 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; frame-src http://localhost:* http://127.0.0.1:*; ">
-  <title>MLBB Tournament Bot</title>
+  <title>Dot</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div id="app">
     <div id="config-screen" class="screen">
       <header>
-        <h1>MLBB Tournament Bot - Setup</h1>
-        <button id="back-from-config-btn" class="hidden">← Back</button>
+        <div>
+          <p class="eyebrow">Dot</p>
+          <h1>Set up the bot</h1>
+        </div>
+        <button type="button" id="back-from-config-btn" class="btn-quiet hidden">Back</button>
       </header>
       <form id="config-form" autocomplete="off" onsubmit="return false;">
-        <h2>Discord Configuration</h2>
-        <label>Bot Token: <input type="password" id="discord-token" required></label>
+        <section class="field-group">
+          <h2>Discord</h2>
+          <label for="discord-token">Bot token</label>
+          <input type="password" id="discord-token" required>
+        </section>
 
-        <h2>Challonge Configuration</h2>
-        <label>Username: <input type="text" id="challonge-username" required></label>
-        <label>API Key: <input type="password" id="challonge-token" required></label>
+        <section class="field-group">
+          <h2>Challonge</h2>
+          <label for="challonge-username">Username</label>
+          <input type="text" id="challonge-username" required>
+          <label for="challonge-token">API key</label>
+          <input type="password" id="challonge-token" required>
+        </section>
 
-        <h2>Bot Settings</h2>
-        <label>Command Prefix: <input type="text" id="bot-prefix" value="!" required></label>
-        <label>TO Role Name: <input type="text" id="bot-to-role" value="Organizer" required></label>
-
-        <h2>Web Settings</h2>
-        <label>Access Password (for network access): <input type="text" id="web-password" placeholder="Leave empty for no password"></label>
+        <section class="field-group">
+          <h2>Bot</h2>
+          <div class="field-row">
+            <div>
+              <label for="bot-prefix">Command prefix</label>
+              <input type="text" id="bot-prefix" value="!" required>
+            </div>
+            <div>
+              <label for="bot-to-role">Organiser role</label>
+              <input type="text" id="bot-to-role" value="Organizer" required>
+            </div>
+          </div>
+          <label for="web-password">Admin password</label>
+          <input type="text" id="web-password" placeholder="Leave empty for no password">
+          <p class="hint">Used when someone opens the admin panel from another machine.</p>
+        </section>
 
         <div class="buttons">
-          <button type="submit">Save & Start Bot</button>
-          <button type="button" id="load-config">Load Config</button>
+          <button type="submit" class="btn-primary">Save and start</button>
+          <button type="button" id="load-config" class="btn-quiet">Reload saved config</button>
         </div>
       </form>
     </div>
 
     <div id="dashboard-screen" class="screen hidden">
       <header>
-        <h1>MLBB Bot</h1>
+        <div>
+          <p class="eyebrow">Dot</p>
+          <h1>Bot</h1>
+        </div>
         <div class="status-indicator">
           <span id="status-dot"></span>
           <span id="status-text">Stopped</span>
-          <button id="settings-btn" title="Settings">⚙</button>
-          <button id="start-btn" class="hidden" title="Start Bot">▶</button>
-          <button id="stop-btn" title="Stop Bot">⏹</button>
+          <button type="button" id="settings-btn" class="btn-quiet" title="Settings">Settings</button>
+          <button type="button" id="start-btn" class="btn-quiet hidden" title="Start bot">Start</button>
+          <button type="button" id="stop-btn" class="btn-quiet" title="Stop bot">Stop</button>
         </div>
       </header>
 
       <section id="network-info">
-        <h3>Network Access</h3>
+        <h2>Admin panel</h2>
         <div class="url-row">
-          <span>Local:</span>
+          <span>This machine</span>
           <code id="local-url">http://localhost:3000</code>
-          <button class="copy-btn" data-target="local-url">📋 Copy</button>
+          <button type="button" class="copy-btn" data-target="local-url">Copy</button>
         </div>
         <div class="url-row">
-          <span>Network:</span>
-          <code id="network-url">http://192.168.1.105:3000</code>
-          <button class="copy-btn" data-target="network-url">📋 Copy</button>
+          <span>Network</span>
+          <code id="network-url">Detecting…</code>
+          <button type="button" class="copy-btn" data-target="network-url">Copy</button>
         </div>
-        <p>Other users on your network can use the Network URL</p>
+        <p class="hint">Anyone on the same network can use the network address.</p>
       </section>
 
       <section id="logs">
-        <h3>Live Logs <label><input type="checkbox" id="auto-scroll" checked> Auto-scroll</label></h3>
+        <h2>Logs <label class="hint"><input type="checkbox" id="auto-scroll" checked> Follow</label></h2>
         <div id="log-container"></div>
       </section>
 
       <div class="buttons">
-        <button id="web-interface-btn">🌐 Web Interface</button>
-        <button id="export-logs-btn">📋 Export Logs</button>
+        <button type="button" id="web-interface-btn" class="btn-primary">Open admin</button>
+        <button type="button" id="export-logs-btn" class="btn-quiet">Export logs</button>
       </div>
     </div>
-    <div id="web-interface-screen" class="screen hidden" style="padding: 0; display: flex; flex-direction: column;">
-      <header style="margin-bottom: 0; padding: 10px 20px; border-bottom: 1px solid #45475a; background: #1e1e2e;">
-        <h1 style="font-size: 1.2em;">Web Interface</h1>
-        <button id="back-to-dashboard-btn" style="padding: 5px 15px;">← Back to Dashboard</button>
+
+    <div id="web-interface-screen" class="screen hidden web-screen">
+      <header>
+        <h1>Admin</h1>
+        <button type="button" id="back-to-dashboard-btn" class="btn-quiet">Back</button>
       </header>
-      <iframe id="web-iframe" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads allow-popups" style="flex: 1; border: none; width: 100%; height: 100%; background: white;"></iframe>
+      <iframe id="web-iframe" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads allow-popups" title="Tournament admin"></iframe>
     </div>
   </div>
 

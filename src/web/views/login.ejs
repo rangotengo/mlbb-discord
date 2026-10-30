@@ -3,7 +3,7 @@
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Login - Dot Tournament Admin</title>
+	<title>Sign in - Dot</title>
 	<link rel="stylesheet" href="/css/reset.css">
 	<link rel="stylesheet" href="/css/variables.css">
 	<link rel="stylesheet" href="/css/layout.css">
@@ -49,7 +49,7 @@
 		.form-group input {
 			width: 100%;
 			padding: 0.75rem 1rem;
-			border: 1px solid var(--border-color);
+			border: 1px solid var(--border-medium);
 			border-radius: var(--radius-md);
 			background: var(--bg-primary);
 			color: var(--text-primary);
@@ -57,14 +57,14 @@
 		}
 		.form-group input:focus {
 			outline: none;
-			border-color: var(--accent-primary);
-			box-shadow: 0 0 0 3px var(--accent-primary-alpha);
+			border-color: var(--accent);
+			box-shadow: 0 0 0 3px var(--accent-glow);
 		}
 		.btn-login {
 			width: 100%;
 			padding: 0.75rem;
-			background: var(--accent-primary);
-			color: white;
+			background: var(--accent);
+			color: #1a140c;
 			border: none;
 			border-radius: var(--radius-md);
 			font-size: 1rem;
@@ -73,11 +73,11 @@
 			transition: background-color 0.2s;
 		}
 		.btn-login:hover {
-			background: var(--accent-hover);
+			background: var(--accent-bright);
 		}
 		.error-message {
-			background: var(--error-bg);
-			color: var(--error-text);
+			background: var(--danger-subtle);
+			color: var(--danger);
 			padding: 0.75rem;
 			border-radius: var(--radius-md);
 			margin-bottom: 1rem;
@@ -90,8 +90,8 @@
 	<div class="login-container">
 		<div class="login-card">
 			<div class="login-header">
-				<h1>Dot Tournament Admin</h1>
-				<p>Enter password to access the admin panel</p>
+				<h1>Dot</h1>
+				<p>Password for this admin panel.</p>
 			</div>
 			<% if (error) { %>
 				<div class="error-message">
@@ -103,7 +103,7 @@
 					<label for="password">Password</label>
 					<input type="password" id="password" name="password" required autofocus>
 				</div>
-				<button type="submit" class="btn-login">Login</button>
+				<button type="submit" class="btn-login">Sign in</button>
 			</form>
 		</div>
 	</div>
