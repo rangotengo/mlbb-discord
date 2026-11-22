@@ -2,7 +2,15 @@ import { Router, Request, Response } from "express";
 import { ChallongeTournament } from "../../database/orm/ChallongeTournament";
 import { EnrolledPlayer } from "../../database/orm/EnrolledPlayer";
 import { MatchSchedule } from "../../database/orm/MatchSchedule";
-import { addTournament, syncTournamentWithChallonge } from "../../util/tournament";
+import {
+	addPreCheckinTournament,
+	addTournament,
+	checkInTeam,
+	createBracketFromCheckin,
+	isPreCheckinName,
+	openPreCheckin,
+	syncTournamentWithChallonge
+} from "../../util/tournament";
 import { getLogger } from "../../util/logger";
 import { getBotClient } from "../server";
 import { getConfig } from "../../config";
@@ -77,6 +85,9 @@ router.get("/api/tournaments", async (req: Request, res: Response) => {
 					verifiedCount,
 					unverifiedCount,
 					checkInDisabled: t.checkInDisabled,
+					phase: t.phase,
+					checkedInCount: t.checkedInTeams?.length || 0,
+					hasBracket: t.hasChallongeBracket(),
 				};
 			})
 		);
@@ -156,6 +167,9 @@ router.get("/api/tournaments/:id", async (req: Request, res: Response) => {
 				unverifiedCount,
 				scheduledCount,
 				checkInDisabled: tournament.checkInDisabled,
+				phase: tournament.phase,
+				checkedInTeams: tournament.checkedInTeams || [],
+				hasBracket: tournament.hasChallongeBracket(),
 			}
 		});
 	} catch (error) {
@@ -168,17 +182,20 @@ router.get("/api/tournaments/:id", async (req: Request, res: Response) => {
 router.post("/api/tournaments", async (req: Request, res: Response) => {
 	try {
 		const { url, name, server } = req.body;
+		const preCheckin = !url || isPreCheckinName(String(name || ""));
 
-		if (!url || !name || !server) {
+		if (!name || !server || (!preCheckin && !url)) {
 			return res.status(400).json({
 				success: false,
-				error: "Missing required fields: url, name, server"
+				error: "Missing required fields: name, server, and a Challonge url unless this is a pre-check-in tournament"
 			});
 		}
 
 		const userId = "web-admin";
 
-		const result = await addTournament(url, name, server, userId);
+		const result = preCheckin
+			? await addPreCheckinTournament(String(name), String(server), userId)
+			: await addTournament(url, name, server, userId);
 
 		if (!result.success) {
 			return res.status(400).json({ success: false, error: result.error });
@@ -190,6 +207,7 @@ router.post("/api/tournaments", async (req: Request, res: Response) => {
 				id: result.customName,
 				challongeId: result.challongeId,
 				url: result.url,
+				phase: result.phase,
 			}
 		});
 	} catch (error) {
@@ -284,6 +302,57 @@ router.post("/api/tournaments/:id/toggle-checkin", async (req: Request, res: Res
 	}
 });
 
+function challongeClient(): WebsiteWrapperChallonge {
+	const config = getConfig();
+	return new WebsiteWrapperChallonge(config.challongeUsername, config.challongeToken);
+}
+
+router.post("/api/tournaments/:id/precheckin/open", async (req: Request, res: Response) => {
+	try {
+		const tournament = await ChallongeTournament.findOne({ where: { tournamentId: getIdParam(req.params) } });
+		if (!tournament) return res.status(404).json({ success: false, error: "Tournament not found" });
+		const result = await openPreCheckin(tournament);
+		if (!result.ok) return res.status(400).json({ success: false, error: result.error });
+		res.json({ success: true, phase: tournament.phase, already: result.already, teams: result.teams });
+	} catch (error) {
+		logger.error("Failed to open pre-check-in:", error);
+		res.status(500).json({ success: false, error: "Failed to open pre-check-in" });
+	}
+});
+
+router.post("/api/tournaments/:id/precheckin/teams", async (req: Request, res: Response) => {
+	try {
+		const tournament = await ChallongeTournament.findOne({ where: { tournamentId: getIdParam(req.params) } });
+		if (!tournament) return res.status(404).json({ success: false, error: "Tournament not found" });
+		const team = String(req.body?.team || "");
+		const result = await checkInTeam(tournament, team);
+		if (!result.ok) return res.status(400).json({ success: false, error: result.error });
+		res.json({ success: true, already: result.already, teams: result.teams });
+	} catch (error) {
+		logger.error("Failed to check in team:", error);
+		res.status(500).json({ success: false, error: "Failed to check in team" });
+	}
+});
+
+router.post("/api/tournaments/:id/precheckin/close", async (req: Request, res: Response) => {
+	try {
+		const tournament = await ChallongeTournament.findOne({ where: { tournamentId: getIdParam(req.params) } });
+		if (!tournament) return res.status(404).json({ success: false, error: "Tournament not found" });
+		const result = await createBracketFromCheckin(tournament, challongeClient());
+		if (!result.ok) return res.status(400).json({ success: false, error: result.error });
+		res.json({
+			success: true,
+			already: result.already,
+			url: result.url,
+			phase: tournament.phase,
+			teams: result.teams
+		});
+	} catch (error) {
+		logger.error("Failed to create bracket from check-in:", error);
+		res.status(500).json({ success: false, error: error instanceof Error ? error.message : "Failed to create bracket" });
+	}
+});
+
 // API: Sync tournament with Challonge
 router.post("/api/tournaments/:id/sync", async (req: Request, res: Response) => {
 	try {
@@ -295,6 +364,12 @@ router.post("/api/tournaments/:id/sync", async (req: Request, res: Response) => 
 
 		if (!tournament) {
 			return res.status(404).json({ success: false, error: "Tournament not found" });
+		}
+		if (!tournament.hasChallongeBracket()) {
+			return res.status(400).json({
+				success: false,
+				error: "This tournament has no Challonge bracket yet. Create it from the checked-in teams first."
+			});
 		}
 
 		// Create challonge service instance

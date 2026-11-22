@@ -143,7 +143,7 @@ const command: CommandDefinition = {
 
 			if (autoPush) {
 				try {
-					await support.challonge.submitScore(tDB!.challongeTournamentId, match, winner, winnerScore, loserScore);
+					await support.challonge.submitScore(tDB!.getChallongeIdForApi(), match, winner, winnerScore, loserScore);
 					await prompt.reply("✅ Score has been automatically pushed to the bracket!");
 				} catch (err) {
 					logger.error("Error submitting score automatically:", err);

@@ -19,7 +19,7 @@ export class DatabaseWrapperPostgres {
 	private wrap(tournament: ChallongeTournament): DatabaseTournament {
 		return {
 			id: tournament.tournamentId,
-			challongeTournamentId: tournament.challongeTournamentId,
+			challongeTournamentId: tournament.challongeTournamentId || undefined,
 			name: tournament.name,
 			description: tournament.description,
 			format: tournament.format,

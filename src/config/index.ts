@@ -65,6 +65,8 @@ Your friendly tournament management bot for Discord!
 
 **📋 Tournament Commands:**
 • \`!add <url> <name>\` - Add a tournament via Challonge URL (TO only)
+• \`!add pre-checkin <name>\` - Add a tournament with no Challonge link, then check teams in before creating the bracket
+• \`!precheckin open|list|close|<team>\` - Open team check-in, record a team, or create the bracket from checked-in teams
 • \`!info [id]\` - Show tournament details (id optional if only one tournament)
 • \`!list\` - List all ongoing tournaments
 • \`!status [id] [new_status]\` - View or change tournament status (id optional if only one tournament)

@@ -31,8 +31,18 @@ export function createTournamentEmbed(tournament: ChallongeTournament): EmbedBui
 	}
 	const hosts = tournament.hosts.map(snowflake => `<@${snowflake}>`).join(" ");
 	fields.push({ name: ":smile: Hosts", value: hosts, inline: true });
-	const embed = new EmbedBuilder()
-		.setURL(`https://challonge.com/${tournament.tournamentId}`)
+	if (tournament.phase && tournament.phase !== "linked") {
+		fields.push({
+			name: ":clipboard: Pre-check-in",
+			value: `${tournament.phase}\n${tournament.checkedInTeams?.length || 0} team(s) checked in`,
+			inline: true
+		});
+	}
+	const embed = new EmbedBuilder();
+	if (tournament.challongeTournamentId) {
+		embed.setURL(`https://challonge.com/${tournament.challongeTournamentId}`);
+	}
+	embed
 		.setTitle(`**${tournament.name}**`)
 		.setFields(fields)
 		.setFooter({ text: "Tournament details as of request time" });

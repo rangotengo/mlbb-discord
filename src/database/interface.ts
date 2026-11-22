@@ -5,6 +5,18 @@ export enum TournamentStatus {
 	COMPLETE = "complete"
 }
 
+/**
+ * How a tournament reaches its Challonge bracket.
+ * Linked tournaments already have a Challonge URL.
+ * Pre-check-in tournaments collect team attendance first, then the bot creates the bracket.
+ */
+export enum TournamentPhase {
+	LINKED = "linked",
+	PRE_CHECKIN = "pre-checkin",
+	CHECKIN_OPEN = "checkin-open",
+	BRACKET_CREATED = "bracket-created"
+}
+
 export enum TournamentFormat {
 	SINGLE_ELIMINATION = "single elimination",
 	DOUBLE_ELIMINATION = "double elimination",
@@ -27,7 +39,7 @@ export interface DatabaseMessage {
 // interface structure WIP as fleshed out command-by-command
 export interface DatabaseTournament {
 	id: string;
-	challongeTournamentId: string;
+	challongeTournamentId?: string;
 	name: string;
 	description: string;
 	format: TournamentFormat;

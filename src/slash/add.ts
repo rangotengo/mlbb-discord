@@ -5,7 +5,7 @@ import {
 	SlashCommandBuilder,
 	SlashCommandSubcommandBuilder
 } from "discord.js";
-import { addTournament } from "../util/tournament";
+import { addPreCheckinTournament, addTournament, isPreCheckinName } from "../util/tournament";
 import { SlashCommand } from "../SlashCommand";
 import { ChallongeTournament } from "../database/orm/ChallongeTournament";
 import { getLogger, Logger } from "../util/logger";
@@ -28,7 +28,10 @@ export class AddCommand extends SlashCommand {
 					.setName("tournament")
 					.setDescription("Add a Challonge tournament to the bot.")
 					.addStringOption(option =>
-						option.setName("url").setDescription("The Challonge tournament URL (e.g., https://challonge.com/xyz)").setRequired(true)
+						option
+							.setName("url")
+							.setDescription("Challonge URL. Leave empty and mention pre-check-in in the name to check in first.")
+							.setRequired(false)
 					)
 					.addStringOption(option =>
 						option.setName("name").setDescription("The custom tournament ID for the bot (e.g., mlbb_spring_2024)").setRequired(true)
@@ -55,17 +58,19 @@ export class AddCommand extends SlashCommand {
 			return;
 		}
 
-		const challongeUrl = interaction.options.getString("url", true);
+		const challongeUrl = interaction.options.getString("url");
 		const customName = interaction.options.getString("name", true);
 		const participantRole = interaction.options.getRole("participantrole");
+		const preCheckin = !challongeUrl || isPreCheckinName(customName);
 
 		await interaction.deferReply();
 
-		// Use shared service to add tournament
-		const result = await addTournament(challongeUrl, customName, interaction.guildId!, interaction.user.id);
+		const result = preCheckin
+			? await addPreCheckinTournament(customName, interaction.guildId!, interaction.user.id)
+			: await addTournament(challongeUrl!, customName, interaction.guildId!, interaction.user.id);
 
 		if (!result.success) {
-			await interaction.reply({ content: result.error!, ephemeral: true });
+			await interaction.editReply({ content: result.error! });
 			return;
 		}
 
@@ -79,10 +84,11 @@ export class AddCommand extends SlashCommand {
 		}
 
 		const roleNote = participantRole ? `\nParticipant role: **${participantRole.name}**` : "";
+		const content = result.phase === "pre-checkin"
+			? `Pre-check-in tournament **${result.customName}** has been added. No Challonge bracket yet.\nHost: <@${result.userId}>${roleNote}\n\nEnroll teams, then \`!precheckin open\`. \`!precheckin close\` creates the bracket from checked-in teams.`
+			: `Tournament **${result.customName}** has been added!\n\nChallonge URL: ${result.url}\nChallonge ID: ${result.challongeId}\nHost: <@${result.userId}>${roleNote}\n\nUse \`!sync ${result.customName}\` to sync with Challonge and fetch tournament data.`;
 
-		await interaction.editReply({
-			content: `Tournament **${result.customName}** has been added!\n\nChallonge URL: ${result.url}\nChallonge ID: ${result.challongeId}\nHost: <@${result.userId}>${roleNote}\n\nUse \`!sync ${result.customName}\` to sync with Challonge and fetch tournament data.`
-		});
+		await interaction.editReply({ content });
 
 		this.logger.verbose(
 			`Tournament "${result.customName}" added by ${interaction.user.id} in server ${interaction.guildId} from Challonge URL ${result.url}`

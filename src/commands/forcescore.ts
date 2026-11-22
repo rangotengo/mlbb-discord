@@ -54,6 +54,9 @@ const command: CommandDefinition = {
 			throw new UserError(`${player} isn't playing in **${tournament.name}**.`);
 		}
 		// can also find open matches, just depends on current round
+		if (!tournament.challongeTournamentId) {
+			throw new UserError(`**${tournament.name}** has no Challonge bracket yet.`);
+		}
 		const match = await findClosedMatch(tournament.challongeTournamentId, challongeId, support.challonge);
 		if (!match) {
 			throw new UserError(`Could not find an open match in **${tournament.name}** including ${player}.`);

@@ -32,7 +32,10 @@ const command: CommandDefinition = {
 			isTournamentHost(msg.member, id)
 		);
 
-		// Use the actual Challonge tournament ID to query Challonge API
+		if (!tournament.challongeTournamentId) {
+			await msg.reply(`**${tournament.name}** has no Challonge bracket yet. Finish pre-check-in with \`!precheckin close\` first.`);
+			return;
+		}
 		const challongeId = tournament.challongeTournamentId;
 
 		const allMatches = await support.challonge.getMatches(challongeId, false);

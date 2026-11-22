@@ -202,6 +202,43 @@
 	padding: 14px 16px;
 }
 
+.precheckin-panel {
+	margin-bottom: 24px;
+	padding: 16px;
+}
+
+.precheckin-heading,
+.precheckin-actions {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+}
+
+.precheckin-teams {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 16px 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.precheckin-teams button {
+	border: 1px solid var(--border);
+	background: var(--bg-primary);
+	color: inherit;
+	border-radius: var(--radius-md);
+	padding: 6px 10px;
+	cursor: pointer;
+}
+
+.precheckin-teams button.is-checked {
+	border-color: var(--success-border);
+	background: var(--success-subtle);
+}
+
 .header-breadcrumbs {
 	color: var(--text-secondary);
 	font-size: 13px;

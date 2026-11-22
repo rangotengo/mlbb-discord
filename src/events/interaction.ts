@@ -75,7 +75,7 @@ export function makeHandler(support: CommandSupport) {
 						}
 						// We need a partial match object for the API wrapper
 						const partialMatch = { matchId } as import("../website/challonge").WebsiteMatch;
-						await support.challonge.submitScore(tournament.challongeTournamentId, partialMatch, winnerId, wScore, lScore);
+						await support.challonge.submitScore(tournament.getChallongeIdForApi(), partialMatch, winnerId, wScore, lScore);
 						await interaction.editReply({
 							content: `✅ Score pushed to Challonge by <@${interaction.user.id}>!`,
 							components: [],

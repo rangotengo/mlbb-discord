@@ -1,7 +1,7 @@
 import { ChallongeTournament } from "../database/orm/ChallongeTournament";
 import { EnrolledPlayer } from "../database/orm/EnrolledPlayer";
 import { MatchSchedule } from "../database/orm/MatchSchedule";
-import { TournamentFormat, TournamentStatus } from "../database/interface";
+import { TournamentFormat, TournamentPhase, TournamentStatus } from "../database/interface";
 import { UserError } from "./errors";
 import { WebsiteWrapperChallonge } from "../website/challonge";
 
@@ -10,7 +10,14 @@ import { WebsiteWrapperChallonge } from "../website/challonge";
  */
 export type AddTournamentResult =
 	| { success: false; error: string }
-	| { success: true; challongeId: string; customName: string; url: string; userId: string };
+	| {
+			success: true;
+			phase: TournamentPhase;
+			challongeId?: string;
+			customName: string;
+			url?: string;
+			userId: string;
+	  };
 
 /**
  * Extracts the Challonge tournament ID from a URL.
@@ -75,6 +82,8 @@ export async function addTournament(
 	tournament.hosts = [userId];
 	tournament.format = TournamentFormat.SWISS;
 	tournament.status = TournamentStatus.PREPARING;
+	tournament.phase = TournamentPhase.LINKED;
+	tournament.checkedInTeams = [];
 	tournament.participantLimit = 0;
 	tournament.publicChannels = [];
 	tournament.privateChannels = [];
@@ -84,6 +93,7 @@ export async function addTournament(
 
 	return {
 		success: true,
+		phase: TournamentPhase.LINKED,
 		challongeId,
 		customName,
 		url,
@@ -91,9 +101,188 @@ export async function addTournament(
 	};
 }
 
+const PRE_CHECKIN_WORD = /^(pre-?check-?in|precheckin)$/i;
+
+/**
+ * A name that mentions pre-check-in creates a local tournament with no Challonge link.
+ * Example: !add pre-checkin spring cup
+ */
+export function isPreCheckinName(name: string): boolean {
+	return name.split(/\s+/).some(word => PRE_CHECKIN_WORD.test(word));
+}
+
+export function displayNameWithoutPhase(name: string): string {
+	const stripped = name
+		.split(/\s+/)
+		.filter(word => !PRE_CHECKIN_WORD.test(word))
+		.join(" ")
+		.trim();
+	return stripped || name.trim();
+}
+
+/**
+ * Creates a tournament that collects team attendance before a Challonge bracket exists.
+ */
+export async function addPreCheckinTournament(
+	name: string,
+	guildId: string,
+	userId: string
+): Promise<AddTournamentResult> {
+	const customName = name.trim();
+	if (!customName) {
+		return { success: false, error: "A tournament name is required." };
+	}
+
+	const existing = await ChallongeTournament.findOne({
+		where: { tournamentId: customName, owningDiscordServer: guildId }
+	});
+	if (existing) {
+		return {
+			success: false,
+			error: `A tournament with the name "${customName}" already exists in this server.`
+		};
+	}
+
+	const tournament = new ChallongeTournament();
+	tournament.tournamentId = customName;
+	tournament.name = displayNameWithoutPhase(customName);
+	tournament.description = "Pre-check-in tournament. The Challonge bracket is created from teams that check in.";
+	tournament.owningDiscordServer = guildId;
+	tournament.hosts = [userId];
+	tournament.format = TournamentFormat.SWISS;
+	tournament.status = TournamentStatus.PREPARING;
+	tournament.phase = TournamentPhase.PRE_CHECKIN;
+	tournament.checkedInTeams = [];
+	tournament.participantLimit = 0;
+	tournament.publicChannels = [];
+	tournament.privateChannels = [];
+	tournament.autoPushScores = true;
+	await tournament.save();
+
+	return { success: true, phase: TournamentPhase.PRE_CHECKIN, customName, userId };
+}
+
+export type CheckinActionResult =
+	| { ok: false; error: string }
+	| { ok: true; tournament: ChallongeTournament; teams: string[]; already: boolean };
+
+function enrolledTeams(players: EnrolledPlayer[]): string[] {
+	return [...new Set(players.map(player => player.team).filter(team => team.length > 0))].sort((a, b) =>
+		a.localeCompare(b)
+	);
+}
+
+function findTeam(teams: string[], requested: string): string | undefined {
+	const needle = requested.trim().toLowerCase();
+	return teams.find(team => team.toLowerCase() === needle);
+}
+
+/**
+ * Opens team attendance. Enrolled teams are the only teams that can check in.
+ */
+export async function openPreCheckin(tournament: ChallongeTournament): Promise<CheckinActionResult> {
+	if (tournament.phase === TournamentPhase.LINKED || tournament.phase === TournamentPhase.BRACKET_CREATED) {
+		return { ok: false, error: `**${tournament.name}** is not a pre-check-in tournament.` };
+	}
+	if (tournament.phase === TournamentPhase.CHECKIN_OPEN) {
+		return { ok: true, tournament, teams: tournament.checkedInTeams, already: true };
+	}
+	const players = await EnrolledPlayer.find({ where: { tournamentId: tournament.tournamentId } });
+	if (enrolledTeams(players).length === 0) {
+		return { ok: false, error: "Enroll teams before opening check-in." };
+	}
+	tournament.phase = TournamentPhase.CHECKIN_OPEN;
+	tournament.checkedInTeams = [];
+	await tournament.save();
+	return { ok: true, tournament, teams: [], already: false };
+}
+
+/**
+ * Records one enrolled team as present. Running it again for the same team changes nothing.
+ */
+export async function checkInTeam(
+	tournament: ChallongeTournament,
+	teamName: string
+): Promise<CheckinActionResult> {
+	if (tournament.phase !== TournamentPhase.CHECKIN_OPEN) {
+		return { ok: false, error: `Check-in is not open for **${tournament.name}**.` };
+	}
+	const players = await EnrolledPlayer.find({ where: { tournamentId: tournament.tournamentId } });
+	const team = findTeam(enrolledTeams(players), teamName);
+	if (!team) {
+		return { ok: false, error: `No enrolled team named "${teamName.trim()}".` };
+	}
+	if (tournament.checkedInTeams.some(checked => checked.toLowerCase() === team.toLowerCase())) {
+		return { ok: true, tournament, teams: tournament.checkedInTeams, already: true };
+	}
+	tournament.checkedInTeams = [...tournament.checkedInTeams, team].sort((a, b) => a.localeCompare(b));
+	await tournament.save();
+	return { ok: true, tournament, teams: tournament.checkedInTeams, already: false };
+}
+
+/**
+ * Closes attendance and creates the Challonge bracket from checked-in teams only.
+ * A retry after the bracket exists does not create a second tournament.
+ */
+export async function createBracketFromCheckin(
+	tournament: ChallongeTournament,
+	challonge: WebsiteWrapperChallonge
+): Promise<CheckinActionResult & { url?: string; created?: number }> {
+	if (tournament.phase === TournamentPhase.BRACKET_CREATED && tournament.challongeTournamentId) {
+		return {
+			ok: true,
+			tournament,
+			teams: tournament.checkedInTeams,
+			already: true,
+			url: `https://challonge.com/${tournament.challongeTournamentId}`
+		};
+	}
+	if (tournament.phase !== TournamentPhase.CHECKIN_OPEN && tournament.phase !== TournamentPhase.PRE_CHECKIN) {
+		return { ok: false, error: `**${tournament.name}** is not waiting on pre-check-in.` };
+	}
+	const teams = tournament.checkedInTeams;
+	if (teams.length < 2) {
+		return { ok: false, error: `Need at least 2 checked-in teams. Currently ${teams.length}.` };
+	}
+
+	let challongeId = tournament.challongeTournamentId;
+	if (!challongeId) {
+		const format = tournament.format === TournamentFormat.FREE_FOR_ALL ? TournamentFormat.SWISS : tournament.format;
+		challongeId = await challonge.createTournament(tournament.name, tournament.description, format);
+		tournament.challongeTournamentId = challongeId;
+		await tournament.save();
+	}
+	const present = new Set(
+		(await EnrolledPlayer.find({ where: { tournamentId: tournament.tournamentId } }))
+			.filter(player => player.challongeId)
+			.map(player => player.team.toLowerCase())
+	);
+	const missing = teams.filter(team => !present.has(team.toLowerCase()));
+	const added = missing.length ? await challonge.bulkAddParticipants(challongeId, missing) : new Map<string, number>();
+	const players = await EnrolledPlayer.find({ where: { tournamentId: tournament.tournamentId } });
+	for (const player of players) {
+		const challongePlayerId = added.get(player.team);
+		if (challongePlayerId && !player.challongeId) {
+			player.challongeId = challongePlayerId;
+			await player.save();
+		}
+	}
+
+	tournament.phase = TournamentPhase.BRACKET_CREATED;
+	await tournament.save();
+	return {
+		ok: true,
+		tournament,
+		teams,
+		already: false,
+		url: `https://challonge.com/${challongeId}`,
+		created: added.size
+	};
+}
+
 /**
  * Resolves a tournament ID from the provided arguments or automatically selects
- * the single tournament if only one exists in the server.
+ * the single current tournament. A finished tournament does not count while another is still running.
  *
  * @param providedId - The tournament ID provided by the user (may be undefined)
  * @param guildId - The Discord server ID
@@ -121,18 +310,20 @@ export async function resolveTournamentId(providedId: string | undefined, guildI
 		throw new UserError("No tournaments found in this server.");
 	}
 
-	// Single tournament - auto-resolve
-	if (tournaments.length === 1) {
-		return tournaments[0].tournamentId;
+	// A finished tournament should not force the player to name the one that is still running.
+	const ongoing = tournaments.filter(t => t.status !== TournamentStatus.COMPLETE);
+	const candidates = ongoing.length ? ongoing : tournaments;
+
+	if (candidates.length === 1) {
+		return candidates[0].tournamentId;
 	}
 
-	// Multiple tournaments - require user to specify
-	const tournamentList = tournaments
+	const tournamentList = candidates
 		.map(t => `• \`${t.tournamentId}\` - **${t.name}**`)
 		.join("\n");
 
 	throw new UserError(
-		`Multiple tournaments exist in this server. Please specify the tournament ID:\n${tournamentList}`
+		`Multiple ${ongoing.length ? "ongoing " : ""}tournaments exist in this server. Please specify the tournament ID:\n${tournamentList}`
 	);
 }
 
@@ -167,7 +358,7 @@ export async function syncTournamentWithChallonge(
 ): Promise<SyncTournamentResult> {
 	try {
 		// Query Challonge API for tournament data
-		const tournamentData = await challonge.getTournament(tournament.challongeTournamentId);
+		const tournamentData = await challonge.getTournament(tournament.getChallongeIdForApi());
 
 		// Match enrolled players to Challonge participants by team name and store challongeId
 		const enrolledPlayers = await EnrolledPlayer.find({
@@ -192,7 +383,7 @@ export async function syncTournamentWithChallonge(
 		const UNSCHEDULED_MATCH_DATE = new Date("2099-12-31T23:59:59Z");
 
 		// Fetch matches from Challonge and create schedule entries
-		const challongeMatches = await challonge.getMatches(tournament.challongeTournamentId);
+		const challongeMatches = await challonge.getMatches(tournament.getChallongeIdForApi());
 
 		// Get existing schedules and create a map for easy lookup
 		const existingSchedules = await MatchSchedule.find({

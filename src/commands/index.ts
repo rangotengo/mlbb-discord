@@ -24,4 +24,5 @@ export { default as verifyPlayer } from "./verifyPlayer";
 export { default as setParticipantRole } from "./setParticipantRole";
 export { default as addhost } from "./addhost";
 export { default as pingteam } from "./pingteam";
+export { default as precheckin } from "./precheckin";
 export { default as removehost } from "./removehost";

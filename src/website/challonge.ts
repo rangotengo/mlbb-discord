@@ -47,6 +47,15 @@ export interface WebsiteMatch {
 }
 
 type TournamentType = "single elimination" | "double elimination" | "round robin" | "swiss";
+
+export function slugFromName(name: string): string {
+	const slug = name
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "_")
+		.replace(/^_+|_+$/g, "")
+		.slice(0, 60);
+	return slug || `mlbb_${Date.now()}`;
+}
 type RankedBy = "match wins" | "game wins" | "points scored" | "points difference" | "custom";
 
 interface ChallongeTournamentSettings {
@@ -296,6 +305,26 @@ export class WebsiteWrapperChallonge {
 			format: tournament.tournament_type,
 			signupCap: tournament.signup_cap
 		};
+	}
+
+	/**
+	 * Creates a pending Challonge tournament and returns its URL slug.
+	 * The slug is what the rest of this client passes as a tournament id.
+	 */
+	public async createTournament(name: string, description: string, format: TournamentType): Promise<string> {
+		const response = await this.fetch<ChallongeTournament>(`${this.baseUrl}tournaments.json`, {
+			method: "POST",
+			body: JSON.stringify({
+				tournament: {
+					name,
+					description,
+					tournament_type: format,
+					url: slugFromName(name)
+				}
+			}),
+			headers: { "Content-Type": "application/json" }
+		});
+		return response.tournament.url;
 	}
 
 	public async updateTournament(tournamentId: string, name: string, desc: string): Promise<void> {

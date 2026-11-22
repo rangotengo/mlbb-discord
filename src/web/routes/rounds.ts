@@ -175,6 +175,9 @@ router.post("/api/tournaments/:id/rounds/:round/start", async (req: Request, res
 		// Get Challonge data for player names
 		const config = getConfig();
 		const challonge = new WebsiteWrapperChallonge(config.challongeUsername, config.challongeToken);
+		if (!tournament.challongeTournamentId) {
+			return res.status(400).json({ success: false, error: "This tournament has no Challonge bracket yet." });
+		}
 		const players = await challonge.getPlayers(tournament.challongeTournamentId);
 		const challongeMatches = await challonge.getMatches(tournament.challongeTournamentId);
 
@@ -377,6 +380,9 @@ router.get("/api/tournaments/:id/rounds", async (req: Request, res: Response) =>
 			try {
 				const config = getConfig();
 				const challonge = new WebsiteWrapperChallonge(config.challongeUsername, config.challongeToken);
+				if (!tournament.challongeTournamentId) {
+					return res.status(400).json({ success: false, error: "This tournament has no Challonge bracket yet." });
+				}
 				const challongeMatches = await challonge.getMatches(tournament.challongeTournamentId);
 
 				// Get round numbers for matches that have schedules

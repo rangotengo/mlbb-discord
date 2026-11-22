@@ -66,6 +66,9 @@ export async function addUserToMatchThreads(
 		}
 
 		// Get matches from Challonge to find which matches involve this player
+		if (!tournament.challongeTournamentId) {
+			return 0;
+		}
 		const allMatches = await challongeService.getMatches(tournament.challongeTournamentId, false);
 		const allPlayers = await challongeService.getPlayers(tournament.challongeTournamentId);
 

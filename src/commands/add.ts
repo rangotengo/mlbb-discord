@@ -1,43 +1,56 @@
+import { Message } from "discord.js";
 import { CommandDefinition } from "../Command";
-import { addTournament, extractChallongeId } from "../util/tournament";
+import { addPreCheckinTournament, addTournament, AddTournamentResult, extractChallongeId, isPreCheckinName } from "../util/tournament";
 import { getLogger } from "../util/logger";
 import { EnrolledPlayer } from "../database/orm";
 import { TournamentFormat, TournamentStatus } from "../database/interface";
 
 const logger = getLogger("command:add");
 
+async function addLinked(args: string[], msg: Message): Promise<AddTournamentResult> {
+	const url = args[0];
+	const customName = args.slice(1).join(" ");
+	try {
+		extractChallongeId(url);
+	} catch {
+		return {
+			success: false,
+			error: "Invalid Challonge URL. Expected `!add https://challonge.com/xyz name` or `!add pre-checkin name`."
+		};
+	}
+	return addTournament(url, customName, msg.guildId!, msg.author.id);
+}
+
 const command: CommandDefinition = {
 	name: "add",
-	requiredArgs: ["url", "...name"],
+	requiredArgs: ["...name"],
 	optionalArgs: [],
 	executor: async (msg, args, support) => {
 		await support.organiserRole.authorise(msg);
 
-		if (args.length < 2) {
+		const first = args[0] ?? "";
+		const preCheckin = isPreCheckinName(args.join(" ")) && !/challonge\.com/i.test(first);
+		if (!preCheckin && args.length < 2) {
 			await msg.reply(
-				`Missing tournament name. Expected format: !add https://challonge.com/xyz name`
+				`Missing tournament name. Expected \`!add https://challonge.com/xyz name\` or \`!add pre-checkin name\`.`
 			);
 			return;
 		}
 
-		const url = args[0];
-		const customName = args.slice(1).join(" ");
-
-		// Validate URL format using centralized function
-		try {
-			extractChallongeId(url);
-		} catch {
-			await msg.reply(
-				`Invalid Challonge URL. Expected format: !add https://challonge.com/xyz name`
-			);
-			return;
-		}
-
-		// Use shared service to add tournament
-		const result = await addTournament(url, customName, msg.guildId!, msg.author.id);
+		const result = preCheckin
+			? await addPreCheckinTournament(args.join(" "), msg.guildId!, msg.author.id)
+			: await addLinked(args, msg);
 
 		if (!result.success) {
 			await msg.reply(result.error!);
+			return;
+		}
+
+		if (result.phase === "pre-checkin") {
+			await msg.reply(
+				`Pre-check-in tournament **${result.customName}** is ready. No Challonge bracket yet.\n` +
+					`Enroll teams, then \`!precheckin open\`. After teams check in, \`!precheckin close\` creates the bracket.`
+			);
 			return;
 		}
 
@@ -46,7 +59,7 @@ const command: CommandDefinition = {
 				channel: msg.channelId,
 				message: msg.id,
 				user: msg.author.id,
-				tournament: customName,
+				tournament: result.customName,
 				command: "add",
 				event: "success"
 			})
@@ -54,7 +67,7 @@ const command: CommandDefinition = {
 
 		// Auto-sync after adding tournament
 		try {
-			const tournamentData = await support.challonge.getTournament(result.challongeId);
+			const tournamentData = await support.challonge.getTournament(result.challongeId!);
 
 			// Match enrolled players to Challonge participants by team name and store challongeId
 			const enrolledPlayers = await EnrolledPlayer.find({

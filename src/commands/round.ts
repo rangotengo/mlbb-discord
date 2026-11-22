@@ -71,7 +71,10 @@ const command: CommandDefinition = {
 
 		await msg.reply("Fetching matches from Challonge... This may take a moment.");
 
-		// Use the actual Challonge tournament ID to query Challonge API
+		if (!tournament.challongeTournamentId) {
+			await msg.reply(`**${tournament.name}** has no Challonge bracket yet. Finish pre-check-in with \`!precheckin close\` first.`);
+			return;
+		}
 		const challongeId = tournament.challongeTournamentId;
 		logger.verbose(`Querying Challonge with ID: "${challongeId}" (bot internal ID: "${id}")`);
 

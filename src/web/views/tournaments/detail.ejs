@@ -37,6 +37,20 @@
 		</div>
 	</div>
 
+	<section class="card precheckin-panel" id="precheckin-panel" hidden>
+		<div class="precheckin-heading">
+			<div>
+				<h3>Team check-in</h3>
+				<p id="precheckin-summary" class="text-secondary">This tournament has no Challonge bracket yet.</p>
+			</div>
+			<div class="precheckin-actions">
+				<button class="btn btn-secondary" id="precheckin-open" type="button" onclick="openPreCheckin()">Open check-in</button>
+				<button class="btn btn-primary" id="precheckin-close" type="button" onclick="closePreCheckin()">Create bracket</button>
+			</div>
+		</div>
+		<ul class="precheckin-teams" id="precheckin-teams"></ul>
+	</section>
+
 	<!-- Tabs Container -->
 	<div class="detail-tabs">
 		<div class="detail-tabs-nav">
@@ -157,7 +171,7 @@
 						<input type="checkbox" id="csv-register-challonge">
 						<span>Register participants to Challonge</span>
 					</label>
-					<p class="help-text">Automatically create Challonge participants for imported players</p>
+					<p class="help-text">Adds teams to the existing Challonge bracket. During pre-check-in, teams stay local until you create the bracket.</p>
 				</div>
 			</div>
 
@@ -322,45 +336,13 @@
 		</div>
 		<div class="modal-body">
 			<div class="csv-format-guide">
-				<h4>Required Columns</h4>
-				<p>Your CSV file must include the following columns in the header row:</p>
-				<table class="table table-sm">
-					<thead>
-						<tr>
-							<th>Column</th>
-							<th>Description</th>
-							<th>Required</th>
-						</tr>
-					</thead>
-					<tbody>
-						<tr>
-							<td><code>email</code></td>
-							<td>Captain's email address</td>
-							<td>Yes</td>
-						</tr>
-						<tr>
-							<td><code>name</code></td>
-							<td>Captain's full name</td>
-							<td>Yes</td>
-						</tr>
-						<tr>
-							<td><code>team</code></td>
-							<td>Team name</td>
-							<td>Yes</td>
-						</tr>
-						<tr>
-							<td><code>discord</code></td>
-							<td>Discord username (e.g., username#0000)</td>
-							<td>No</td>
-						</tr>
-					</tbody>
-				</table>
-
-				<h4 style="margin-top: 24px;">Example CSV</h4>
-				<pre style="background: var(--bg-secondary); padding: 16px; border-radius: var(--radius-sm); overflow-x: auto;">email,name,team,discord
-captain1@example.com,John Doe,Team Alpha,johndoe#1234
-captain2@example.com,Jane Smith,Team Beta,janesmith#5678
-captain3@example.com,Bob Wilson,Team Gamma,</pre>
+				<h4>One row per team</h4>
+				<p>Upload a CSV or tab-separated TSV file. Use <code>Team Name</code> followed by <code>email_p1, discord_p1, name_p1</code> through <code>email_p6, discord_p6, name_p6</code>.</p>
+				<p>Each populated player slot needs an email and name. Discord usernames, global names, server display names, IDs, or user mentions are accepted. An organizer can run sync-roles to match members and assign roles; duplicate names require manual verification. Leave all three cells blank for unused slots, such as an absent sixth player.</p>
+				<p>Every player is enrolled under the same team. Import counts refer to players. Reimporting an email updates that player's existing enrollment in this tournament.</p>
+				<pre style="overflow-x: auto;">Team Name,email_p1,discord_p1,name_p1,email_p2,discord_p2,name_p2,email_p3,discord_p3,name_p3,email_p4,discord_p4,name_p4,email_p5,discord_p5,name_p5,email_p6,discord_p6,name_p6
+Team Alpha,p1@example.com,player1,Player One,p2@example.com,player2,Player Two,,,,,,,,,,,,</pre>
+				<p>The previous one-player-per-row format (<code>email,name,team,discord</code>) is also supported.</p>
 
 				<h4 style="margin-top: 24px;">Download Template</h4>
 				<p>Download a blank template to get started:</p>
@@ -476,7 +458,9 @@ captain3@example.com,Bob Wilson,Team Gamma,</pre>
 
 <style>
 .tournament-detail-page {
-	max-width: 1200px;
+	width: 100%;
+	max-width: none;
+	min-width: 0;
 }
 
 .page-header {
@@ -510,12 +494,13 @@ captain3@example.com,Bob Wilson,Team Gamma,</pre>
 
 .info-grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
 	gap: 16px;
-	margin-bottom: 32px;
+	margin-bottom: 20px;
 }
 
 .info-card {
+	min-width: 0;
 	background: var(--bg-secondary);
 	border: 1px solid var(--border);
 	border-radius: var(--radius-md);
@@ -942,7 +927,8 @@ captain3@example.com,Bob Wilson,Team Gamma,</pre>
 
 <%- contentFor('script') %>
 <script>
-const tournamentId = "<%= tournamentId %>";
+const tournamentId = <%- JSON.stringify(tournamentId).replace(/</g, '\u003c') %>;
+const tournamentPathId = encodeURIComponent(tournamentId);
 
 document.addEventListener('DOMContentLoaded', () => {
 	const tzSelect = document.getElementById('schedule-timezone');
@@ -971,13 +957,13 @@ document.addEventListener('DOMContentLoaded', () => {
 async function loadTournamentData() {
 	try {
 		const [tRes, pRes, sRes] = await Promise.all([
-			Dot.API.get(`/api/tournaments/${tournamentId}`),
-			Dot.API.get(`/api/tournaments/${tournamentId}/participants`),
-			Dot.API.get(`/api/tournaments/${tournamentId}/schedules`)
+			Dot.API.get(`/api/tournaments/${tournamentPathId}`),
+			Dot.API.get(`/api/tournaments/${tournamentPathId}/participants`),
+			Dot.API.get(`/api/tournaments/${tournamentPathId}/schedules`)
 		]);
 
-		renderInfo(tRes.data);
 		renderParticipants(pRes.data || []);
+		renderInfo(tRes.data);
 		renderSchedules(sRes.data || []);
 	} catch (error) {
 		console.error("Failed to load tournament data:", error);
@@ -995,6 +981,7 @@ function renderInfo(t) {
 	statusEl.className = `badge badge-${getStatusBadgeClass(status)}`;
 
 	document.getElementById('t-format').textContent = t.format || 'Unknown Format';
+	renderPreCheckin(t);
 
 	// Info Cards
 	document.getElementById('t-server').textContent = t.server || '—';
@@ -1018,7 +1005,85 @@ function renderInfo(t) {
 		if (checkInLabel) checkInLabel.textContent = t.checkInDisabled ? 'Check-in off' : 'Check-in on';
 	}
 
-	function getStatusBadgeClass(status) {
+}
+
+let currentTournament = null;
+
+function renderPreCheckin(t) {
+	currentTournament = t;
+	const panel = document.getElementById('precheckin-panel');
+	const waiting = t.phase === 'pre-checkin' || t.phase === 'checkin-open';
+	panel.hidden = !waiting;
+	document.getElementById('btn-sync').hidden = !t.hasBracket;
+	document.getElementById('btn-start-round').hidden = !t.hasBracket;
+	if (!waiting) return;
+
+	const teams = t.checkedInTeams || [];
+	const open = t.phase === 'checkin-open';
+	document.getElementById('precheckin-summary').textContent = open
+		? `${teams.length} team(s) checked in. Create the Challonge bracket when attendance is done.`
+		: 'Enroll teams, then open check-in. The bracket is created only from teams that check in.';
+	document.getElementById('precheckin-open').hidden = open;
+	document.getElementById('precheckin-close').disabled = teams.length < 2;
+	const list = document.getElementById('precheckin-teams');
+	list.replaceChildren();
+	for (const team of enrolledTeamNames()) {
+		const checked = teams.some(name => name.toLowerCase() === team.toLowerCase());
+		const item = document.createElement('li');
+		const button = document.createElement('button');
+		button.type = 'button';
+		button.textContent = checked ? `${team} checked in` : `Check in ${team}`;
+		button.disabled = !open || checked;
+		button.className = checked ? 'is-checked' : '';
+		button.addEventListener('click', () => checkInDashboardTeam(team));
+		item.appendChild(button);
+		list.appendChild(item);
+	}
+}
+
+function enrolledTeamNames() {
+	return [...new Set([...document.querySelectorAll('#participants-body tr strong')].map(node => node.textContent.trim()).filter(Boolean))]
+		.sort((a, b) => a.localeCompare(b));
+}
+
+async function openPreCheckin() {
+	const button = document.getElementById('precheckin-open');
+	button.disabled = true;
+	try {
+		await Dot.API.post(`/api/tournaments/${tournamentPathId}/precheckin/open`);
+		Dot.Toast.success('Team check-in is open');
+		await loadTournamentData();
+	} catch (error) {
+		Dot.Toast.error(error.message || 'Failed to open check-in');
+	} finally {
+		button.disabled = false;
+	}
+}
+
+async function checkInDashboardTeam(team) {
+	try {
+		await Dot.API.post(`/api/tournaments/${tournamentPathId}/precheckin/teams`, { team });
+		Dot.Toast.success(`${team} checked in`);
+		await loadTournamentData();
+	} catch (error) {
+		Dot.Toast.error(error.message || 'Failed to check in team');
+	}
+}
+
+async function closePreCheckin() {
+	const button = document.getElementById('precheckin-close');
+	button.disabled = true;
+	try {
+		const response = await Dot.API.post(`/api/tournaments/${tournamentPathId}/precheckin/close`);
+		Dot.Toast.success(response.already ? 'Bracket already exists' : `Bracket created: ${response.url}`);
+		await loadTournamentData();
+	} catch (error) {
+		Dot.Toast.error(error.message || 'Failed to create bracket');
+		button.disabled = false;
+	}
+}
+
+function getStatusBadgeClass(status) {
 	switch (status) {
 		case 'preparing': return 'warning';
 		case 'in progress': return 'info';
@@ -1102,7 +1167,7 @@ async function syncTournament() {
 		btn.disabled = true;
 		btn.textContent = 'Syncing...';
 
-		const response = await Dot.API.post(`/api/tournaments/${tournamentId}/sync`);
+		const response = await Dot.API.post(`/api/tournaments/${tournamentPathId}/sync`);
 		const data = response.data;
 
 		let message = 'Tournament synced successfully!';
@@ -1136,7 +1201,7 @@ async function toggleCheckIn() {
 	if (box && box.dataset.ready !== '1') return;
 	if (box) box.disabled = true;
 	try {
-		const result = await Dot.API.post(`/api/tournaments/${tournamentId}/toggle-checkin`);
+		const result = await Dot.API.post(`/api/tournaments/${tournamentPathId}/toggle-checkin`);
 		const disabled = result.checkInDisabled;
 		Dot.Toast.success(`Check-in ${disabled ? 'disabled' : 'enabled'} for this tournament.`);
 		await loadTournamentData();
@@ -1182,7 +1247,9 @@ function openCSVImportModal(type) {
 	document.getElementById('csv-modal-title').textContent = title;
 
 	// Show/hide Challonge option
-	document.getElementById('csv-options-section').style.display = type === 'participants' ? 'block' : 'none';
+	const hasBracket = currentTournament && currentTournament.hasBracket;
+	document.getElementById('csv-options-section').style.display = type === 'participants' && hasBracket ? 'block' : 'none';
+	document.getElementById('csv-register-challonge').checked = false;
 
 	// Show modal
 	document.getElementById('csv-import-modal').style.display = 'flex';
@@ -1231,8 +1298,8 @@ function handleCSVFileSelect(event) {
 }
 
 function processCSVFile(file) {
-	if (!file.name.endsWith('.csv')) {
-		Dot.Toast.error('Please select a CSV file');
+	if (!/\.(csv|tsv)$/i.test(file.name)) {
+		Dot.Toast.error('Please select a CSV or TSV file');
 		return;
 	}
 
@@ -1373,7 +1440,7 @@ async function confirmCSVImport() {
 	btnText.textContent = 'Importing...';
 
 	try {
-		const endpoint = `/api/tournaments/${tournamentId}/${currentCSVImportType}/import`;
+		const endpoint = `/api/tournaments/${tournamentPathId}/${currentCSVImportType}/import`;
 		const body = { csv: currentCSVData };
 
 		if (currentCSVImportType === 'participants') {
@@ -1453,13 +1520,13 @@ async function saveParticipant(event) {
 	try {
 		if (editingParticipantId) {
 			// Update
-			await Dot.API.put(`/api/tournaments/${tournamentId}/participants/${editingParticipantId}`, {
+			await Dot.API.put(`/api/tournaments/${tournamentPathId}/participants/${editingParticipantId}`, {
 				name, team, discordUsername
 			});
 			Dot.Toast.success('Participant updated successfully');
 		} else {
 			// Create
-			await Dot.API.post(`/api/tournaments/${tournamentId}/participants`, {
+			await Dot.API.post(`/api/tournaments/${tournamentPathId}/participants`, {
 				email, name, team, discordUsername
 			});
 			Dot.Toast.success('Participant added successfully');
@@ -1481,7 +1548,7 @@ async function deleteParticipant(id) {
 		'Are you sure you want to delete this participant?',
 		async () => {
 			try {
-				await Dot.API.delete(`/api/tournaments/${tournamentId}/participants/${id}`);
+				await Dot.API.delete(`/api/tournaments/${tournamentPathId}/participants/${id}`);
 				Dot.Toast.success('Participant deleted successfully');
 				await loadTournamentData();
 			} catch (error) {
@@ -1552,10 +1619,10 @@ async function saveSchedule(event) {
 		const body = { matchId, scheduledTime, timezone: timezone || undefined };
 
 		if (editingScheduleId) {
-			await Dot.API.put(`/api/tournaments/${tournamentId}/schedules/${editingScheduleId}`, body);
+			await Dot.API.put(`/api/tournaments/${tournamentPathId}/schedules/${editingScheduleId}`, body);
 			Dot.Toast.success('Schedule updated successfully');
 		} else {
-			await Dot.API.post(`/api/tournaments/${tournamentId}/schedules`, body);
+			await Dot.API.post(`/api/tournaments/${tournamentPathId}/schedules`, body);
 			Dot.Toast.success('Schedule added successfully');
 		}
 
@@ -1575,7 +1642,7 @@ async function deleteSchedule(id) {
 		'Are you sure you want to delete this schedule?',
 		async () => {
 			try {
-				await Dot.API.delete(`/api/tournaments/${tournamentId}/schedules/${id}`);
+				await Dot.API.delete(`/api/tournaments/${tournamentPathId}/schedules/${id}`);
 				Dot.Toast.success('Schedule deleted successfully');
 				await loadTournamentData();
 			} catch (error) {
@@ -1686,8 +1753,8 @@ async function openStartRoundModal() {
 
 		// Fetch rounds and channels in parallel
 		const [roundsRes, channelsRes] = await Promise.all([
-			Dot.API.get(`/api/tournaments/${tournamentId}/rounds`),
-			Dot.API.get(`/api/tournaments/${tournamentId}/channels`)
+			Dot.API.get(`/api/tournaments/${tournamentPathId}/rounds`),
+			Dot.API.get(`/api/tournaments/${tournamentPathId}/channels`)
 		]);
 
 		startRoundData.rounds = roundsRes.data || [];
@@ -1745,7 +1812,7 @@ async function onRoundChange() {
 
 async function loadRoundPreview(round) {
 	try {
-		const response = await Dot.API.get(`/api/tournaments/${tournamentId}/rounds/${round}/preview`);
+		const response = await Dot.API.get(`/api/tournaments/${tournamentPathId}/rounds/${round}/preview`);
 		startRoundData.preview = response.data;
 
 		// Show warnings if any
@@ -1808,7 +1875,7 @@ async function confirmStartRound() {
 		btn.disabled = true;
 		btn.textContent = 'Starting...';
 
-		const response = await Dot.API.post(`/api/tournaments/${tournamentId}/rounds/${round}/start`, {
+		const response = await Dot.API.post(`/api/tournaments/${tournamentPathId}/rounds/${round}/start`, {
 			channelId
 		});
 
@@ -1883,14 +1950,14 @@ function closeCSVFormatModal() {
 
 function downloadParticipantTemplate() {
 	// Use server-side download endpoint (works reliably in Electron)
-	window.location.href = `/api/tournaments/${tournamentId}/participants/download-template`;
+	window.location.href = `/api/tournaments/${tournamentPathId}/participants/download-template`;
 	Dot.Toast.success('Downloading participant template...');
 }
 
 async function downloadScheduleTemplate() {
 	try {
 		// Use server-side download endpoint (works reliably in Electron)
-		window.location.href = `/api/tournaments/${tournamentId}/schedules/download`;
+		window.location.href = `/api/tournaments/${tournamentPathId}/schedules/download`;
 		Dot.Toast.success('Downloading schedule template...');
 	} catch (error) {
 		console.error('Failed to download schedule template:', error);
@@ -1900,7 +1967,7 @@ async function downloadScheduleTemplate() {
 
 function downloadBlankScheduleTemplate() {
 	// Use server-side download endpoint (works reliably in Electron)
-	window.location.href = `/api/tournaments/${tournamentId}/schedules/download-blank`;
+	window.location.href = `/api/tournaments/${tournamentPathId}/schedules/download-blank`;
 	Dot.Toast.success('Downloading blank schedule template...');
 }
 
@@ -1982,7 +2049,7 @@ async function loadExistingSchedulesForModal() {
 
 	try {
 		// Fetch existing schedules
-		const response = await Dot.API.get(`/api/tournaments/${tournamentId}/schedules`);
+		const response = await Dot.API.get(`/api/tournaments/${tournamentPathId}/schedules`);
 		const schedules = response.data.data || response.data;
 
 		if (!schedules || schedules.length === 0) {

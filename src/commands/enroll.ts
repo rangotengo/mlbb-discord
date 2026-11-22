@@ -14,7 +14,7 @@ const command: CommandDefinition = {
 	optionalArgs: ["id", "register"],
 	executor: async (msg, args, support) => {
 		const [providedId, registerFlag] = args;
-		const shouldRegisterToChallonge = registerFlag === "register";
+		let shouldRegisterToChallonge = registerFlag === "register";
 		const id = await resolveTournamentId(providedId, msg.guildId);
 		const tournament = await support.database.authenticateHost(id, msg.author.id, msg.guildId, undefined, isTournamentHost(msg.member, id));
 
@@ -56,6 +56,12 @@ const command: CommandDefinition = {
 		} catch (e) {
 			await msg.reply("Could not find the tournament in the database.");
 			return;
+		}
+		if (shouldRegisterToChallonge && !challongeTournament.hasChallongeBracket()) {
+			shouldRegisterToChallonge = false;
+			await msg.reply(
+				"This tournament is still in pre-check-in, so teams stay local. `!precheckin close` adds the teams that check in."
+			);
 		}
 
 		// First pass: Parse CSV and collect enrollment data

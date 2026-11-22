@@ -2,7 +2,7 @@
 	<div class="page-header">
 		<div>
 			<h2 class="page-title">Tournaments</h2>
-			<p class="page-subtitle">Create a bracket, then sync it from Challonge.</p>
+			<p class="page-subtitle">Link a Challonge bracket, or start pre-check-in and create the bracket from the teams that show up.</p>
 		</div>
 		<div class="header-actions">
 			<button class="btn btn-secondary" id="btn-disable-all-checkin" onclick="toggleAllCheckIn()">Check-in for all</button>
@@ -25,6 +25,7 @@
 					<th>Tournament ID</th>
 					<th>Tournament Name</th>
 					<th>Status</th>
+					<th>Bracket</th>
 					<th>Format</th>
 					<th>Verified Teams</th>
 					<th>Unverified Teams</th>
@@ -33,7 +34,7 @@
 			</thead>
 			<tbody id="tournaments-body">
 				<tr>
-					<td colspan="7" class="loading-row">
+					<td colspan="8" class="loading-row">
 						<div class="spinner"></div> Loading tournaments...
 					</td>
 				</tr>
@@ -53,8 +54,8 @@
 		<div class="modal-body">
 			<div class="form-group">
 				<label class="form-label">Challonge URL</label>
-				<input type="url" class="form-input" id="create-url" placeholder="https://challonge.com/xyz" required>
-				<div class="form-help">Enter the Challonge tournament URL</div>
+				<input type="url" class="form-input" id="create-url" placeholder="https://challonge.com/xyz">
+				<div class="form-help">Leave empty, or mention pre-check-in in the name, to collect team check-in before creating the bracket.</div>
 			</div>
 			<div class="form-group">
 				<label class="form-label">Tournament Name</label>
@@ -134,7 +135,7 @@ async function loadTournaments() {
 		console.error('Error details:', error.message, error.stack);
 		document.getElementById('tournaments-body').innerHTML = `
 			<tr>
-				<td colspan="7" class="empty-state">
+				<td colspan="8" class="empty-state">
 					Failed to load tournaments
 				</td>
 			</tr>
@@ -157,7 +158,7 @@ function renderTournaments() {
 	if (filtered.length === 0) {
 		tbody.innerHTML = `
 			<tr>
-				<td colspan="7" class="empty-state">
+				<td colspan="8" class="empty-state">
 					<div class="empty-state-text">No tournaments found</div>
 					<div class="empty-state-help">Create a new tournament to get started</div>
 				</td>
@@ -170,11 +171,12 @@ function renderTournaments() {
 		<tr>
 			<td><code>${escapeHtml(t.id)}</code></td>
 			<td>
-				<a href="/tournaments/${t.id}" class="tournament-link">
+				<a href="/tournaments/${encodeURIComponent(t.id)}" class="tournament-link">
 					<strong>${escapeHtml(t.name)}</strong>
 				</a>
 			</td>
 			<td><span class="badge badge-${getStatusBadgeClass(t.status)}">${t.status}</span></td>
+			<td>${bracketLabel(t)}</td>
 			<td>${t.format || '—'}</td>
 			<td class="num-ok">${t.verifiedCount || 0}</td>
 			<td class="num-warn">${t.unverifiedCount || 0}</td>
@@ -182,15 +184,23 @@ function renderTournaments() {
 				<details class="row-menu">
 					<summary aria-label="Actions">···</summary>
 					<div class="row-menu-panel">
-						<a href="/tournaments/${t.id}">Open</a>
-						<button type="button" onclick="syncTournament('${t.id}', '${escapeHtml(t.name)}')">Sync from Challonge</button>
-						<button type="button" onclick="toggleCheckIn('${t.id}')">${t.checkInDisabled ? 'Enable check-in' : 'Disable check-in'}</button>
-						<button type="button" class="menu-danger" onclick="deleteTournament('${t.id}')">Delete</button>
+						<a href="/tournaments/${encodeURIComponent(t.id)}">Open</a>
+						${t.hasBracket ? `<button type="button" onclick="syncTournament('${escapeHtml(t.id)}', '${escapeHtml(t.name)}')">Sync from Challonge</button>` : ''}
+						<button type="button" onclick="toggleCheckIn('${escapeHtml(t.id)}')">${t.checkInDisabled ? 'Enable Discord check-in' : 'Disable Discord check-in'}</button>
+						<button type="button" class="menu-danger" onclick="deleteTournament('${escapeHtml(t.id)}')">Delete</button>
 					</div>
 				</details>
 			</td>
 		</tr>
 	`).join('');
+}
+
+function bracketLabel(tournament) {
+	if (tournament.hasBracket) return '<span class="badge badge-success">Challonge</span>';
+	const count = tournament.checkedInCount || 0;
+	if (tournament.phase === 'checkin-open') return `<span class="badge badge-warning">Check-in open · ${count}</span>`;
+	if (tournament.phase === 'pre-checkin') return '<span class="badge badge-secondary">Pre-check-in</span>';
+	return '<span class="badge badge-secondary">No bracket</span>';
 }
 
 // Get badge class for status
@@ -238,23 +248,25 @@ async function createTournament() {
 	const name = document.getElementById('create-name').value.trim();
 	const server = document.getElementById('create-server').value.trim();
 
-	if (!url || !name || !server) {
-		Dot.Toast.error('Please fill in all fields');
+	if (!name || !server) {
+		Dot.Toast.error('Name and server are required');
 		return;
 	}
 
 	try {
-		// Create tournament
 		const createResponse = await Dot.API.post('/api/tournaments', { url, name, server });
-		Dot.Toast.success('Tournament created successfully. Syncing...');
-
-		// Auto-sync after creation
-		try {
-			await Dot.API.post(`/api/tournaments/${name}/sync`);
-			Dot.Toast.success('Tournament synced successfully!');
-		} catch (syncError) {
-			console.error('Auto-sync failed:', syncError);
-			Dot.Toast.warning('Tournament created but sync failed. Try syncing manually.');
+		const preCheckin = createResponse.data && createResponse.data.phase === 'pre-checkin';
+		if (preCheckin) {
+			Dot.Toast.success('Pre-check-in tournament created. The bracket is created after teams check in.');
+		} else {
+			Dot.Toast.success('Tournament created successfully. Syncing...');
+			try {
+				await Dot.API.post(`/api/tournaments/${encodeURIComponent(name)}/sync`);
+				Dot.Toast.success('Tournament synced successfully!');
+			} catch (syncError) {
+				console.error('Auto-sync failed:', syncError);
+				Dot.Toast.warning('Tournament created but sync failed. Try syncing manually.');
+			}
 		}
 
 		closeCreateModal();
@@ -268,7 +280,7 @@ async function createTournament() {
 async function syncTournament(id, name) {
 	try {
 		Dot.Toast.info(`Syncing tournament "${name}"...`);
-		await Dot.API.post(`/api/tournaments/${id}/sync`);
+		await Dot.API.post(`/api/tournaments/${encodeURIComponent(id)}/sync`);
 		Dot.Toast.success(`Tournament "${name}" synced successfully!`);
 		loadTournaments();
 	} catch (error) {
@@ -280,7 +292,7 @@ async function syncTournament(id, name) {
 // Toggle check-in for a specific tournament
 async function toggleCheckIn(id) {
 	try {
-		const result = await Dot.API.post(`/api/tournaments/${id}/toggle-checkin`);
+		const result = await Dot.API.post(`/api/tournaments/${encodeURIComponent(id)}/toggle-checkin`);
 		const disabled = result.checkInDisabled;
 		Dot.Toast.success(`Check-in ${disabled ? 'disabled' : 'enabled'} for tournament.`);
 		loadTournaments();
@@ -318,7 +330,7 @@ async function deleteTournament(id) {
 		`Are you sure you want to delete tournament "${id}"?`,
 		async () => {
 			try {
-				await Dot.API.delete(`/api/tournaments/${id}`);
+				await Dot.API.delete(`/api/tournaments/${encodeURIComponent(id)}`);
 				Dot.Toast.success('Tournament deleted');
 				loadTournaments();
 			} catch (error) {

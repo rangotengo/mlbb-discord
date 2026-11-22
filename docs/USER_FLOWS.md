@@ -135,6 +135,8 @@ If automatic and OTP verification both fail, a TO can manually verify a player:
 
 Create your tournament on [Challonge](https://challonge.com) first.
 
+To check teams in before a bracket exists, skip Challonge and use [pre-check-in](#pre-check-in) instead.
+
 #### 1.2 Add Tournament to Bot
 
 Once your tournament is created on Challonge, add it to the bot:
@@ -184,6 +186,25 @@ Example:
 - Bot parses CSV and adds players to database
 - Updates existing players if email matches
 - Reports count of new/updated players
+
+### Pre-check-in
+
+Use this when the bracket should contain only the teams that show up.
+
+1. Create the tournament with no Challonge URL.
+
+```
+!add pre-checkin spring cup
+```
+
+The dashboard create form does the same thing when the Challonge URL is empty.
+
+2. Enroll teams with `!enroll`.
+3. Open attendance with `!precheckin open`.
+4. Each team checks in with `!precheckin Team Name`. `!precheckin list` shows who is in.
+5. Close attendance with `!precheckin close`.
+
+The bot creates the Challonge tournament and adds only the checked-in teams. At least two teams are required. Run `!sync` after that to pull matches. Closing again does not create a second bracket.
 
 #### 1.4 Enroll Players
 

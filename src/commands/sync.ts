@@ -36,6 +36,12 @@ const command: CommandDefinition = {
 			await msg.reply("Failed to load tournament data.");
 			return;
 		}
+		if (!fullTournament.hasChallongeBracket()) {
+			await msg.reply(
+				`**${fullTournament.name}** has no Challonge bracket yet. Finish pre-check-in with \`!precheckin close\` first.`
+			);
+			return;
+		}
 
 		// Use shared sync utility
 		const result = await syncTournamentWithChallonge(fullTournament, support.challonge);

@@ -1,5 +1,5 @@
 import { BaseEntity, Column, Entity, OneToMany, PrimaryColumn } from "typeorm";
-import { TournamentFormat, TournamentStatus } from "../interface";
+import { TournamentFormat, TournamentPhase, TournamentStatus } from "../interface";
 import { Countdown } from "./Countdown";
 import { EnumColumn, JsonArrayColumn } from "./decorators";
 import { Participant } from "./Participant";
@@ -14,10 +14,10 @@ export class ChallongeTournament extends BaseEntity {
 	@PrimaryColumn()
 	tournamentId!: string;
 
-	/// The actual Challonge tournament ID/slug (extracted from Challonge URL)
-	/// This is used to query the Challonge API
-	@Column()
-	challongeTournamentId!: string;
+	/// The actual Challonge tournament ID/slug (extracted from Challonge URL).
+	/// Empty until a pre-check-in tournament creates its bracket.
+	@Column({ nullable: true })
+	challongeTournamentId?: string;
 
 	/// User-provided short name.
 	@Column()
@@ -75,6 +75,16 @@ export class ChallongeTournament extends BaseEntity {
 	@Column({ default: false })
 	checkInDisabled!: boolean;
 
+	/// Linked tournaments already exist on Challonge.
+	/// Pre-check-in tournaments collect team attendance before the bracket exists.
+	@EnumColumn(TournamentPhase, "LINKED")
+	phase!: TournamentPhase;
+
+	/// Team names that confirmed attendance while phase is checkin-open.
+	/// Distinct from EnrolledPlayer.verified, which is Discord identity verification.
+	@JsonArrayColumn()
+	checkedInTeams!: string[];
+
 	/// The ORM relationship for all participants, pending and confirmed.
 	@OneToMany(() => Participant, participant => participant.tournament, { cascade: true, onDelete: "CASCADE" })
 	participants!: Participant[];
@@ -94,6 +104,13 @@ export class ChallongeTournament extends BaseEntity {
 	 * @returns The Challonge tournament ID to use for API queries
 	 */
 	getChallongeIdForApi(): string {
+		if (!this.challongeTournamentId) {
+			throw new Error(`Tournament "${this.tournamentId}" has no Challonge bracket yet.`);
+		}
 		return this.challongeTournamentId;
+	}
+
+	hasChallongeBracket(): boolean {
+		return !!this.challongeTournamentId;
 	}
 }

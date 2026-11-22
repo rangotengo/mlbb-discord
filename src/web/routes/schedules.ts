@@ -49,6 +49,9 @@ router.get("/api/tournaments/:id/schedules", async (req: Request, res: Response)
 		let challongeMatches: any[] = []; // Type: ChallongeMatch[] from getTournament()
 
 		try {
+			if (!tournament.challongeTournamentId) {
+				throw new Error("This tournament has no Challonge bracket yet.");
+			}
 			const tournamentData = await challonge.getTournament(tournament.challongeTournamentId);
 
 			// Build player ID -> name map
@@ -139,6 +142,9 @@ router.post("/api/tournaments/:id/schedules", async (req: Request, res: Response
 				config.challongeUsername,
 				config.challongeToken
 			);
+			if (!tournament.challongeTournamentId) {
+				throw new Error("This tournament has no Challonge bracket yet.");
+			}
 			const challongeMatches = await challonge.getMatches(tournament.challongeTournamentId);
 			const matchData = challongeMatches.find(m => m.matchId === parseInt(matchId, 10));
 			if (matchData) {
@@ -284,6 +290,9 @@ router.post("/api/tournaments/:id/schedules/import", async (req: Request, res: R
 				config.challongeUsername,
 				config.challongeToken
 			);
+			if (!tournament.challongeTournamentId) {
+				throw new Error("This tournament has no Challonge bracket yet.");
+			}
 			const challongeMatches = await challonge.getMatches(tournament.challongeTournamentId);
 			challongeMatchMap = new Map(challongeMatches.map(m => [m.matchId, m.round]));
 		} catch (error) {
