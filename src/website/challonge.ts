@@ -312,19 +312,29 @@ export class WebsiteWrapperChallonge {
 	 * The slug is what the rest of this client passes as a tournament id.
 	 */
 	public async createTournament(name: string, description: string, format: TournamentType): Promise<string> {
-		const response = await this.fetch<ChallongeTournament>(`${this.baseUrl}tournaments.json`, {
-			method: "POST",
-			body: JSON.stringify({
-				tournament: {
-					name,
-					description,
-					tournament_type: format,
-					url: slugFromName(name)
-				}
-			}),
-			headers: { "Content-Type": "application/json" }
-		});
-		return response.tournament.url;
+		const base = slugFromName(name);
+		for (let attempt = 0; attempt < 5; attempt++) {
+			const url = attempt === 0 ? base : `${base.slice(0, 54)}_${Date.now().toString(36)}`;
+			try {
+				const response = await this.fetch<ChallongeTournament>(`${this.baseUrl}tournaments.json`, {
+					method: "POST",
+					body: JSON.stringify({
+						tournament: {
+							name,
+							description,
+							tournament_type: format,
+							url
+						}
+					}),
+					headers: { "Content-Type": "application/json" }
+				});
+				return response.tournament.url;
+			} catch (error) {
+				const taken = error instanceof Error && /url.*(taken|already)/i.test(error.message);
+				if (!taken || attempt === 4) throw error;
+			}
+		}
+		throw new Error("Could not find an available Challonge URL.");
 	}
 
 	public async updateTournament(tournamentId: string, name: string, desc: string): Promise<void> {

@@ -20,8 +20,8 @@ export async function downloadAndValidateCSV(
 		throw new UserError("Please attach a CSV file.");
 	}
 
-	if (!attachment.name?.endsWith(".csv")) {
-		throw new UserError("The attached file must be a CSV.");
+	if (!/\.(csv|tsv)$/i.test(attachment.name || "")) {
+		throw new UserError("The attached file must be a CSV or TSV.");
 	}
 
 	let csvText: string;

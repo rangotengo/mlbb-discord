@@ -1,3 +1,5 @@
+import { getCommandReference } from "./commandReference";
+import { ALLOWED_CATEGORY_ID } from "../util/channelScope";
 import express, { Request, Response, NextFunction } from "express";
 import path from "path";
 import session from "express-session";
@@ -135,6 +137,13 @@ export function createWebServer() {
 	// Health check endpoint
 	app.get("/api/health", (req: Request, res: Response) => {
 		res.json({ status: "ok", timestamp: new Date().toISOString() });
+	});
+
+	app.get("/commands", (_req: Request, res: Response) => {
+		res.render("commands", {
+			title: "Commands", path: "/commands", commands: getCommandReference(getConfig().defaultPrefix),
+			categoryId: ALLOWED_CATEGORY_ID
+		});
 	});
 
 	// Tournament routes

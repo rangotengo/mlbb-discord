@@ -22,7 +22,7 @@ export class EnrolledPlayer extends BaseEntity {
 	discordUsername?: string;
 
 	@Column({ nullable: true, type: "int" })
-	otp?: number;
+	otp?: number | null;
 
 	@Column({ default: 0 })
 	emailSent!: number;

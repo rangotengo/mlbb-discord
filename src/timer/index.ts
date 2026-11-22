@@ -28,6 +28,14 @@ export class TimeWizard {
 		}
 	}
 
+	public renameTournament(oldId: string, newId: string): void {
+		const timers = this.timers.get(oldId);
+		if (!timers) return;
+		for (const timer of timers) timer.renameTournament(newId);
+		this.timers.delete(oldId);
+		this.timers.set(newId, timers);
+	}
+
 	public async cancel(tournamentId: string): Promise<void> {
 		logger.verbose(`cancel ${tournamentId}`);
 		for (const timer of this.timers.get(tournamentId) || []) {

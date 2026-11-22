@@ -1,3 +1,4 @@
+import { isAllowedChannel } from "./channelScope";
 import { Client, GuildMember, Message, TextChannel, User } from "discord.js";
 import { getConfig } from "../config";
 import { UserError } from "./errors";
@@ -5,7 +6,7 @@ import { UserError } from "./errors";
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 export async function send(bot: Client, channelId: string, ...args: Parameters<TextChannel["send"]>) {
 	const channel = await bot.channels.fetch(channelId);
-	if (channel?.isSendable()) {
+	if (channel?.isSendable() && !channel.isDMBased() && isAllowedChannel(channel)) {
 		return await channel.send(...args);
 	}
 	throw new Error(`${channelId} is not a text channel`);

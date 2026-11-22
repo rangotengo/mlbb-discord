@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { isAllowedChannel } from "../../util/channelScope";
 import { ChallongeTournament } from "../../database/orm/ChallongeTournament";
 import { EnrolledPlayer } from "../../database/orm/EnrolledPlayer";
 import { MatchSchedule } from "../../database/orm/MatchSchedule";
@@ -34,6 +35,45 @@ async function validateTournament(tournamentId: string): Promise<ChallongeTourna
 		where: { tournamentId }
 	});
 }
+
+// Only stored match threads for the explicitly selected tournament and round are targets.
+router.post("/api/tournaments/:id/rounds/:round/announcement", async (req: Request, res: Response) => {
+	try {
+		const tournamentId = getIdParam(req.params);
+		const roundText = getIdParam(req.params, "round");
+		const roundNumber = Number(roundText);
+		const message = typeof req.body.message === "string" ? req.body.message.trim() : "";
+		if (!/^-?\d+$/.test(roundText) || !Number.isSafeInteger(roundNumber) || roundNumber === 0 || !message || message.length > 2000) {
+			return res.status(400).json({ success: false, error: "Select a round and enter a message of 1–2000 characters." });
+		}
+		const tournament = await validateTournament(tournamentId);
+		if (!tournament) return res.status(404).json({ success: false, error: "Tournament not found" });
+		const schedules = await MatchSchedule.find({ where: { tournamentId, roundNumber } });
+		const threadIds = [...new Set(schedules.map(s => s.threadId).filter((id): id is string => !!id))];
+		if (!threadIds.length) return res.status(400).json({ success: false, error: "No match threads recorded for this round. Start the round first." });
+		const client = tryGetBotClient();
+		if (!client) return res.status(503).json({ success: false, error: "Bot client not ready" });
+		const guild = await client.guilds.fetch(tournament.owningDiscordServer);
+		const sent: string[] = [];
+		const failed: string[] = [];
+		for (const threadId of threadIds) {
+			try {
+				const thread = await guild.channels.fetch(threadId);
+				if (!thread?.isThread() || thread.guildId !== tournament.owningDiscordServer) throw new Error("Match thread unavailable");
+				await thread.send({ content: message, allowedMentions: { parse: [] } });
+				sent.push(threadId);
+			} catch (error) {
+				logger.error(`Announcement failed for thread ${threadId}:`, error);
+				failed.push(threadId);
+			}
+		}
+		logger.info(`Round announcement: tournament=${tournamentId} round=${roundNumber} sent=${sent.length} failed=${failed.length}`);
+		return res.json({ success: failed.length === 0, data: { sent, failed, total: threadIds.length } });
+	} catch (error) {
+		logger.error("Failed to send round announcement:", error);
+		return res.status(500).json({ success: false, error: "Failed to send announcement" });
+	}
+});
 
 // API: Preview matches for a round
 router.get("/api/tournaments/:id/rounds/:round/preview", async (req: Request, res: Response) => {
@@ -133,8 +173,8 @@ router.post("/api/tournaments/:id/rounds/:round/start", async (req: Request, res
 		}
 
 		const targetChannel = await guild.channels.fetch(channelId).catch(() => null);
-		if (!targetChannel || targetChannel.type !== ChannelType.GuildText) {
-			return res.status(400).json({ success: false, error: "Invalid text channel" });
+		if (!targetChannel || targetChannel.type !== ChannelType.GuildText || !isAllowedChannel(targetChannel)) {
+			return res.status(400).json({ success: false, error: "Choose a text channel in category 1551342799276875907" });
 		}
 
 		// Get enrolled players
@@ -438,7 +478,7 @@ router.get("/api/tournaments/:id/channels", async (req: Request, res: Response) 
 		}
 
 		const channels = guild.channels.cache
-			.filter((ch: any) => ch.type === 0 /* GuildText */)
+			.filter((ch: any) => ch.type === ChannelType.GuildText && isAllowedChannel(ch))
 			.map((ch: any) => ({
 				id: ch.id,
 				name: ch.name,

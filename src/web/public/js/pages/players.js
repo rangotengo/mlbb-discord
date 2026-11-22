@@ -68,13 +68,13 @@
 					<td>${escapeHtml(p.team)}</td>
 					<td>
 						${p.verified
-							? `<span class="verified-badge">
-									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+							? `<span class="verified-badge" title="Verified player">
+									<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true" focusable="false">
 										<polyline points="20 6 9 17 4 12"></polyline>
 									</svg>
-									${escapeHtml(displayDiscord)}
+									<span>${escapeHtml(displayDiscord)}</span>
 								</span>`
-							: `<span class="unverified-badge">${escapeHtml(displayDiscord)}</span>`
+							: `<span class="unverified-badge" title="Unverified player">${escapeHtml(displayDiscord)}</span>`
 						}
 					</td>
 					<td>
@@ -85,8 +85,8 @@
 					</td>
 					<td onclick="event.stopPropagation()">
 						<div class="action-buttons">
-							<button class="btn btn-sm btn-secondary btn-icon" onclick="openEditModal(${p.id})">Edit</button>
-							<button class="btn btn-sm btn-danger btn-icon" onclick="deletePlayer(${p.id}, '${escapeJs(displayName)}', '${escapeJs(tournamentName)}')">Delete</button>
+							<button class="btn btn-sm btn-secondary" onclick="openEditModal(${p.id})">Edit</button>
+							<button class="btn btn-sm btn-danger" onclick="deletePlayer(${p.id}, '${escapeJs(displayName)}', '${escapeJs(tournamentName)}')">Delete</button>
 						</div>
 					</td>
 				</tr>

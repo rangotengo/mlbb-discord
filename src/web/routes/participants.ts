@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { EnrolledPlayer } from "../../database/orm/EnrolledPlayer";
 import { ChallongeTournament } from "../../database/orm/ChallongeTournament";
-import { parseCSVRow } from "../../util";
+import { parseParticipantImport, TEAM_IMPORT_HEADERS } from "../../util/participantImport";
 import { getLogger } from "../../util/logger";
 import { In } from "typeorm";
 
@@ -180,44 +180,19 @@ router.post("/api/tournaments/:id/participants/import", async (req: Request, res
 			return res.status(404).json({ success: false, error: "Tournament not found" });
 		}
 
-		const lines = csv.trim().split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0);
-
-		if (lines.length < 2) {
-			return res.status(400).json({ success: false, error: "CSV must have at least a header and one data row" });
-		}
-
-		// Parse header
-		const headers = parseCSVRow(lines[0]).map(h => h.toLowerCase());
-		const emailIdx = headers.findIndex(h => h.includes("email"));
-		const nameIdx = headers.findIndex(h => h.includes("name"));
-		const teamIdx = headers.findIndex(h => h.includes("team"));
-		const discordUsernameIdx = headers.findIndex(h => h === "discord username" || h === "discordusername" || h === "discord");
-		const discordIdIdx = headers.findIndex(h => h === "discord id" || h === "discordid");
-
-		if (emailIdx === -1 || nameIdx === -1 || teamIdx === -1) {
-			return res.status(400).json({
-				success: false,
-				error: "CSV header must contain 'email', 'name', and 'team' columns"
-			});
+		let parsed: ReturnType<typeof parseParticipantImport>;
+		try {
+			parsed = parseParticipantImport(csv);
+		} catch (error) {
+			return res.status(400).json({ success: false, error: error instanceof Error ? error.message : "Invalid participant data" });
 		}
 
 		let addedCount = 0;
 		let updatedCount = 0;
-		const errors: string[] = [];
+		const errors: string[] = [...parsed.errors];
 
-		// Process each row
-		for (let i = 1; i < lines.length; i++) {
-			const columns = parseCSVRow(lines[i]);
-			const email = columns[emailIdx];
-			const name = columns[nameIdx];
-			const team = columns[teamIdx];
-			const discordUsername = discordUsernameIdx !== -1 ? columns[discordUsernameIdx] : undefined;
-			const discordId = discordIdIdx !== -1 ? columns[discordIdIdx]?.trim() : undefined;
-
-			if (!email || !name || !team) {
-				errors.push(`Row ${i + 1}: Missing required fields`);
-				continue;
-			}
+		// Expand each team row into individual player records.
+		for (const { email, name, team, discordUsername, discordId, source } of parsed.players) {
 
 			try {
 				const normalizedEmail = email.trim().toLowerCase();
@@ -230,9 +205,6 @@ router.post("/api/tournaments/:id/participants/import", async (req: Request, res
 				if (!participant) {
 					participant = new EnrolledPlayer();
 					participant.tournamentId = tournamentId;
-					addedCount++;
-				} else {
-					updatedCount++;
 				}
 				// Always normalize email on every import (fixes previously stored mixed-case/whitespace emails)
 				participant.email = normalizedEmail;
@@ -241,18 +213,18 @@ router.post("/api/tournaments/:id/participants/import", async (req: Request, res
 				participant.team = team;
 				participant.discordUsername = discordUsername;
 
-				// If discordId is provided, auto-verify (player verified in a previous tournament)
+				// Save imported identity; sync-roles verifies membership and assigns roles.
 				if (discordId) {
 					participant.discordId = discordId;
-					participant.verified = true;
 				} else {
 					participant.verified = participant.verified || false;
 				}
 
 				await participant.save();
+				if (isNew) addedCount++; else updatedCount++;
 			} catch (err) {
 				const errorMsg = err instanceof Error ? err.message : String(err);
-				errors.push(`Row ${i + 1}: ${errorMsg}`);
+				errors.push(`${source}: ${errorMsg}`);
 			}
 		}
 
@@ -281,14 +253,9 @@ router.get("/api/tournaments/:id/participants/download-template", async (req: Re
 			return res.status(404).json({ success: false, error: "Tournament not found" });
 		}
 
-		// Create blank CSV with examples
-		const headers = 'email,name,team,discord username,discord id';
-		const exampleRows = [
-			'captain1@example.com,John Doe,Team Alpha,johndoe,123456789',
-			'captain2@example.com,Jane Smith,Team Beta,janesmith,',
-			'captain3@example.com,Bob Wilson,Team Gamma,,'
-		];
-		const csvContent = [headers, ...exampleRows].join('\n');
+		const example = ["Team Alpha", ...Array.from({ length: 6 }, (_, i) =>
+			[`player${i + 1}@example.com`, `player${i + 1}`, `Player ${i + 1}`]).flat()];
+		const csvContent = [TEAM_IMPORT_HEADERS.join(','), example.join(',')].join('\n');
 
 		// Set headers for download
 		res.setHeader('Content-Type', 'text/csv; charset=utf-8');

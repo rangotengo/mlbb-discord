@@ -1,6 +1,7 @@
+import { isVerificationThread } from "../util/verificationThread";
 import { CommandDefinition } from "../Command";
 import { getLogger } from "../util/logger";
-import { isTournamentOrganizer, TICKET_CHANNEL_PREFIX } from "../util";
+import { isTournamentOrganizer } from "../util";
 
 const logger = getLogger("command:close");
 
@@ -16,22 +17,17 @@ const command: CommandDefinition = {
 			return;
 		}
 
-		if (!msg.channel.isTextBased() || !('name' in msg.channel) || !msg.channel.name) {
-			await msg.reply("This command can only be used in text channels.");
+		if (!(await isVerificationThread(msg.channel))) {
+			await msg.reply("This command can only be used in private verification threads.");
 			return;
 		}
 
-		if (!msg.channel.name.startsWith(TICKET_CHANNEL_PREFIX)) {
-			await msg.reply("This command can only be used in ticket channels.");
-			return;
-		}
-
-		await msg.reply("Closing ticket in 5 seconds...");
+		await msg.reply("Closing verification thread in 5 seconds...");
 		setTimeout(async () => {
 			try {
 				await msg.channel.delete("Ticket closed by TO");
 			} catch (e) {
-				logger.error("Failed to delete ticket channel:", e);
+				logger.error("Failed to delete verification thread:", e);
 			}
 		}, 5000);
 	}

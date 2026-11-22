@@ -1,9 +1,11 @@
+import { isVerificationThread } from "../util/verificationThread";
 import { EmbedBuilder } from "discord.js";
 import { CommandDefinition } from "../Command";
 import { EnrolledPlayer } from "../database/orm/EnrolledPlayer";
 import { ChallongeTournament } from "../database/orm/ChallongeTournament";
 import { getLogger } from "../util/logger";
-import { isTournamentOrganizer, assignParticipantRole, TO_COMMAND_BLOCKED, NO_TOURNAMENTS_FOUND, addUserToMatchThreads, TICKET_CHANNEL_PREFIX } from "../util";
+import { isTournamentOrganizer, assignParticipantRole, TO_COMMAND_BLOCKED, NO_TOURNAMENTS_FOUND, addUserToMatchThreads } from "../util";
+import { selectActionableEnrollments } from "../util/enrolledPlayers";
 
 const logger = getLogger("command:verify");
 
@@ -16,15 +18,11 @@ const command: CommandDefinition = {
 			return;
 		}
 
-		// Restrict to ticket channels only
-		const isTicketChannel =
-			msg.channel.isTextBased() &&
-			"name" in msg.channel &&
-			typeof msg.channel.name === "string" &&
-			msg.channel.name.startsWith(TICKET_CHANNEL_PREFIX);
+		// Restrict to private verification threads only
+		const isTicketChannel = await isVerificationThread(msg.channel);
 
 		if (!isTicketChannel) {
-			await msg.reply("This command can only be used in ticket channels. Please use `!check-in` to create a ticket.");
+			await msg.reply("This command can only be used in private verification threads. Please use `!check-in` to open a private thread.");
 			return;
 		}
 
@@ -36,7 +34,7 @@ const command: CommandDefinition = {
 
 		// Find tournaments in this guild
 		const tournaments = await ChallongeTournament.find({
-			where: { owningDiscordServer: msg.guildId! }
+			where: { owningDiscordServer: msg.guildId!, checkInChannelId: msg.channel.isThread() ? msg.channel.parentId! : msg.channel.id }
 		});
 
 		if (tournaments.length === 0) {
@@ -54,17 +52,13 @@ const command: CommandDefinition = {
 		});
 
 		const guildPlayers = players.filter(p => tournamentIds.includes(p.tournamentId));
-
-		// Block if all tournaments the player is enrolled in have check-in disabled
-		if (guildPlayers.length > 0 && guildPlayers.every(p => {
-			const tournament = tournamentMap.get(p.tournamentId);
-			return tournament?.checkInDisabled === true;
-		})) {
+		const { actionable, closed } = selectActionableEnrollments(guildPlayers, tournamentMap);
+		if (closed) {
 			await msg.reply("❌ Check in is already closed. Please contact the Tournament Organizer for assistance.");
 			return;
 		}
 
-		if (guildPlayers.length === 0) {
+		if (actionable.length === 0) {
 			const embed = new EmbedBuilder()
 				.setTitle("Verification Failed")
 				.setDescription("No pending verification found for you. Please use `!email <your_email>` first.")
@@ -73,9 +67,8 @@ const command: CommandDefinition = {
 			return;
 		}
 
-		// We assume all pending records for this user in this guild have the same OTP,
-		// since !email sets it for all of them at once.
-		const matchingPlayer = guildPlayers.find(p => p.otp === otp);
+		// !email sets the same OTP on each current enrollment for this player.
+		const matchingPlayer = actionable.find(p => p.otp === otp);
 
 		if (!matchingPlayer) {
 			const embed = new EmbedBuilder()
@@ -90,7 +83,7 @@ const command: CommandDefinition = {
 		const successfulTournaments: string[] = [];
 
 		// Process all matching players in parallel for better performance
-		const matchingPlayers = guildPlayers.filter(p => p.otp === otp);
+		const matchingPlayers = actionable.filter(p => p.otp === otp);
 
 		// Fetch member once for all operations
 		const member = msg.member || await msg.guild?.members.fetch(msg.author.id).catch(() => null);
@@ -146,12 +139,8 @@ const command: CommandDefinition = {
 		if (successfulTournaments.length > 0) {
 			let desc = "You have been successfully verified and added to the tournament roster!";
 
-			// Auto-close the ticket channel if verification happened inside one
-			const isTicketChannel =
-				msg.channel.isTextBased() &&
-				"name" in msg.channel &&
-				typeof msg.channel.name === "string" &&
-				msg.channel.name.startsWith(TICKET_CHANNEL_PREFIX);
+			// Auto-close the verification thread if verification happened inside one
+			const isTicketChannel = await isVerificationThread(msg.channel);
 
 			if (isTicketChannel) {
 				desc += "\n\n🎟️ This ticket will be automatically closed in **5 seconds**. Welcome!";
@@ -168,7 +157,7 @@ const command: CommandDefinition = {
 					try {
 						await msg.channel.delete("Ticket auto-closed after successful verification");
 					} catch (e) {
-						logger.error("Failed to auto-close ticket channel after verification:", e);
+						logger.error("Failed to auto-close verification thread after verification:", e);
 					}
 				}, 5000);
 			}

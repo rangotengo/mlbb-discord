@@ -8,10 +8,11 @@ const logger = getLogger("role:organiser");
  * Creates the server role that permits using the list and create commands.
  */
 export class OrganiserRoleProvider {
-	protected roleCache: { [serverId: string]: string } = {};
+	protected roleCache: { [serverId: string]: { name: string; id: string } } = {};
 
-	// Using American spelling for DJS consistency
-	constructor(readonly name: string, readonly color?: number) {}
+	// Using American spelling for DJS consistency.
+	// name stays writable so Settings can change the live TO role.
+	constructor(public name: string, readonly color?: number) {}
 
 	/**
 	 * Creates the role in question and stores it in the internal cache.
@@ -26,7 +27,7 @@ export class OrganiserRoleProvider {
 			color: this.color,
 			reason: "Auto-created by Dot."
 		});
-		this.roleCache[server.id] = role.id;
+		this.roleCache[server.id] = { name: this.name, id: role.id };
 		logger.info(`Role ${this.name} (${role.id}) created in ${server.name} (${server.id}).`);
 		return role.id;
 	}
@@ -39,14 +40,16 @@ export class OrganiserRoleProvider {
 	 * @returns Discord role snowflake
 	 */
 	public async get(server: Guild): Promise<string> {
-		if (server.id in this.roleCache) {
-			return this.roleCache[server.id];
+		const cached = this.roleCache[server.id];
+		if (cached && cached.name === this.name) {
+			return cached.id;
 		}
 		// Find already-created role and cache in memory
 		const existingRole = server.roles.cache.find(role => role.name === this.name);
 		if (existingRole) {
 			logger.verbose(`Cached role ${this.name} (${existingRole.id}) in ${server.name} (${server.id}).`);
-			return (this.roleCache[server.id] = existingRole.id);
+			this.roleCache[server.id] = { name: this.name, id: existingRole.id };
+			return existingRole.id;
 		}
 		logger.verbose(`Cache miss for role ${this.name} in ${server.name} (${server.id}).`);
 		return await this.create(server);

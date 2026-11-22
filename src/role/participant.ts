@@ -23,6 +23,10 @@ export class ParticipantRoleProvider {
 	// Using American spelling for DJS consistency
 	constructor(protected readonly bot: Client, readonly color?: number) {}
 
+	public forget(tournamentId: string): void {
+		delete this.roleCache[tournamentId];
+	}
+
 	/**
 	 * Creates the role in question on the specified server for the specified tournament.
 	 * Exceptions (missing permissions, network fault) can be thrown.

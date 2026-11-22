@@ -15,10 +15,6 @@
 		<div class="alert alert-warning">
 			<strong>Server restart required:</strong> Changes to <code>SQLITE_DB</code> require a full application restart to take effect. Please restart the backend process entirely.
 		</div>
-	<% } else if (locals.botRestart) { %>
-		<div class="alert alert-warning">
-			<strong>Bot restart required:</strong> Changes to Prefix or Role require the bot client to restart to reflect these properly. Please restart the application.
-		</div>
 	<% } %>
 
 	<div class="card">

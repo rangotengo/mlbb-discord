@@ -1,3 +1,4 @@
+import { isVerificationThread } from "../util/verificationThread";
 import { Interaction } from "discord.js";
 import { CommandSupport } from "../Command";
 import { AutocompletableCommand, SlashCommand } from "../SlashCommand";
@@ -14,8 +15,15 @@ import { SetParticipantRoleCommand } from "../slash/setParticipantRole";
 import { ChallongeTournament } from "../database/orm";
 import { serialiseInteraction } from "../util";
 import { getLogger } from "../util/logger";
+import { isAllowedChannel, isConfiguredCheckInChannel } from "../util/channelScope";
 
 const logger = getLogger("interaction");
+
+// Metadata is available to the dashboard without requiring a Discord connection.
+export const slashCommandMetadata = [
+	TimerCommand.meta, AddCommand.meta, HostCommand.meta, UpdateCommand.meta, InfoCommand.meta,
+	ListCommand.meta, ThreadCommand.meta, InviteCommand.meta, VerifyPlayerCommand.meta, SetParticipantRoleCommand.meta
+];
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 export function makeHandler(support: CommandSupport) {
@@ -48,6 +56,7 @@ export function makeHandler(support: CommandSupport) {
 		if (!interaction.inCachedGuild()) {
 			return;
 		}
+		if ((!isAllowedChannel(interaction.channel) && !await isConfiguredCheckInChannel(interaction.channel))) return;
 		if (interaction.isChatInputCommand()) {
 			logger.verbose(serialiseInteraction(interaction));
 			await commands.get(interaction.commandName)?.run(interaction);
@@ -94,13 +103,13 @@ export function makeHandler(support: CommandSupport) {
 				});
 			} else if (customId === "close_ticket") {
 				const channel = interaction.channel;
-				if (channel && channel.isTextBased()) {
-					await interaction.reply("Closing ticket in 5 seconds...");
+				if (channel && await isVerificationThread(channel)) {
+					await interaction.reply("Closing verification thread in 5 seconds...");
 					setTimeout(async () => {
 						try {
 							await channel.delete("Ticket closed by user or TO");
 						} catch (e) {
-							logger.error("Failed to delete ticket channel:", e);
+							logger.error("Failed to delete verification thread:", e);
 						}
 					}, 5000);
 				}

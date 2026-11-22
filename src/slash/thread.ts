@@ -3,6 +3,7 @@ import { ChatInputCommandInteraction, ChannelType, Role, SlashCommandBuilder, Te
 import { SlashCommand } from "../SlashCommand";
 import { getLogger, Logger } from "../util/logger";
 import { getConfig } from "../config";
+import { isAllowedChannel } from "../util/channelScope";
 
 /**
  * Looks up a role by exact or partial name match.
@@ -108,9 +109,9 @@ export class ThreadCommand extends SlashCommand {
 			targetChannel = interaction.channel;
 		}
 
-		if (!targetChannel || targetChannel.type !== ChannelType.GuildText) {
+		if (!targetChannel || targetChannel.type !== ChannelType.GuildText || !isAllowedChannel(targetChannel)) {
 			await interaction.reply({
-				content: "Please provide a valid text channel to create the thread in.",
+				content: "Choose a text channel in category 1551342799276875907.",
 				ephemeral: true
 			});
 			return;

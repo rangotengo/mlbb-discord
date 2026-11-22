@@ -1,3 +1,4 @@
+import { isAllowedChannel } from "./util/channelScope";
 import { ActivityType, Client, GatewayIntentBits, Partials } from "discord.js";
 import { getConfig } from "./config"; // Must be imported first among first-party modules
 import { initializeDatabase } from "./database/postgres";
@@ -41,7 +42,7 @@ const logger = getLogger("index");
 		sendMessage: async (...args) => (await send(bot, ...args)).id,
 		editMessage: async (channelId, messageId, newMessage) => {
 			const channel = await bot.channels.fetch(channelId);
-			if (channel?.isTextBased()) {
+			if (channel?.isTextBased() && !channel.isDMBased() && isAllowedChannel(channel)) {
 				await channel.messages.edit(messageId, newMessage);
 			} else {
 				throw new Error(`${channelId} is not a text channel`);

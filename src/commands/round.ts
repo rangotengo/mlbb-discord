@@ -1,3 +1,4 @@
+import { isAllowedChannel } from "../util/channelScope";
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, ComponentType, EmbedBuilder, ThreadAutoArchiveDuration, TextChannel } from "discord.js";
 import { CommandDefinition } from "../Command";
 import { TournamentStatus } from "../database/interface";
@@ -64,7 +65,7 @@ const command: CommandDefinition = {
 		);
 
 		const targetChannel = await msg.guild?.channels.fetch(channelId).catch(() => null);
-		if (!targetChannel || targetChannel.type !== ChannelType.GuildText) {
+		if (!targetChannel || targetChannel.type !== ChannelType.GuildText || !isAllowedChannel(targetChannel)) {
 			await msg.reply(`Could not find a valid Text Channel using the ID \`${channelId}\` in this server.`);
 			return;
 		}

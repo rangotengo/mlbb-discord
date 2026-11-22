@@ -1,10 +1,11 @@
+import { parseParticipantImport } from "../util/participantImport";
 import { CommandDefinition } from "../Command";
 import { EnrolledPlayer } from "../database/orm/EnrolledPlayer";
 import { isTournamentHost } from "../util/discord";
 import { getLogger } from "../util/logger";
 import { ChallongeTournament } from "../database/orm/ChallongeTournament";
 import { resolveTournamentId } from "../util/tournament";
-import { downloadAndValidateCSV, parseCSVRow } from "../util";
+import { downloadAndValidateCSV } from "../util";
 
 const logger = getLogger("command:enroll");
 
@@ -14,7 +15,7 @@ const command: CommandDefinition = {
 	optionalArgs: ["id", "register"],
 	executor: async (msg, args, support) => {
 		const [providedId, registerFlag] = args;
-		let shouldRegisterToChallonge = registerFlag === "register";
+		const wantsChallongeRegister = registerFlag === "register";
 		const id = await resolveTournamentId(providedId, msg.guildId);
 		const tournament = await support.database.authenticateHost(id, msg.author.id, msg.guildId, undefined, isTournamentHost(msg.member, id));
 
@@ -31,17 +32,11 @@ const command: CommandDefinition = {
 			return;
 		}
 
-		const lines = csvText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-
-		const headers = parseCSVRow(lines[0]).map(h => h.toLowerCase());
-		const emailIdx = headers.findIndex(h => h.includes("email"));
-		const nameIdx = headers.findIndex(h => h.includes("name"));
-		const teamIdx = headers.findIndex(h => h.includes("team"));
-		const discordUsernameIdx = headers.findIndex(h => h === "discord username" || h === "discordusername" || h === "discord");
-		const discordIdIdx = headers.findIndex(h => h === "discord id" || h === "discordid");
-
-		if (emailIdx === -1 || nameIdx === -1 || teamIdx === -1) {
-			await msg.reply("The CSV header must at least contain 'teamName', 'name' and 'email' columns.");
+		let parsed: ReturnType<typeof parseParticipantImport>;
+		try {
+			parsed = parseParticipantImport(csvText);
+		} catch (error) {
+			await msg.reply(error instanceof Error ? error.message : "Invalid participant data");
 			return;
 		}
 
@@ -57,8 +52,8 @@ const command: CommandDefinition = {
 			await msg.reply("Could not find the tournament in the database.");
 			return;
 		}
-		if (shouldRegisterToChallonge && !challongeTournament.hasChallongeBracket()) {
-			shouldRegisterToChallonge = false;
+		const shouldRegisterToChallonge = wantsChallongeRegister && challongeTournament.hasChallongeBracket();
+		if (wantsChallongeRegister && !shouldRegisterToChallonge) {
 			await msg.reply(
 				"This tournament is still in pre-check-in, so teams stay local. `!precheckin close` adds the teams that check in."
 			);
@@ -78,15 +73,8 @@ const command: CommandDefinition = {
 		const enrollments: EnrollmentData[] = [];
 		const teamsToRegister = new Set<string>(); // Teams that need Challonge registration
 
-		for (let i = 1; i < lines.length; i++) {
-			const columns = parseCSVRow(lines[i]);
-			const email = columns[emailIdx];
-			if (!email) continue;
-			const normalizedEmail = email.trim().toLowerCase();
-			const name = columns[nameIdx] || "";
-			const team = columns[teamIdx] || "";
-			const discordUsername = discordUsernameIdx !== -1 ? columns[discordUsernameIdx] : undefined;
-			const discordId = discordIdIdx !== -1 ? columns[discordIdIdx]?.trim() : undefined;
+		for (const { email, name, team, discordUsername, discordId } of parsed.players) {
+			const normalizedEmail = email;
 
 			let enrolledPlayer = await EnrolledPlayer.createQueryBuilder("player")
 				.innerJoinAndSelect("player.tournament", "tournament")
@@ -109,10 +97,9 @@ const command: CommandDefinition = {
 			enrolledPlayer.team = team;
 			enrolledPlayer.discordUsername = discordUsername;
 
-			// If discordId is provided, auto-verify (player verified in a previous tournament)
+			// Save imported identity; sync-roles verifies membership and assigns roles.
 			if (discordId) {
 				enrolledPlayer.discordId = discordId;
-				enrolledPlayer.verified = true;
 			}
 
 			// Track teams that need Challonge registration
@@ -153,6 +140,7 @@ const command: CommandDefinition = {
 		if (shouldRegisterToChallonge && challongeRegisteredCount > 0) {
 			responseMsg += `\n\n📝 Registered ${challongeRegisteredCount} team(s) to Challonge.`;
 		}
+		if (parsed.errors.length) responseMsg += `\nSkipped ${parsed.errors.length} invalid player entries:\n${parsed.errors.slice(0, 5).join("\n")}`;
 		await msg.reply(responseMsg);
 	}
 };

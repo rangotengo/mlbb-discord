@@ -1,3 +1,4 @@
+import { isAllowedChannel } from "../util/channelScope";
 import { ChannelType, RESTPostAPIApplicationCommandsJSONBody } from "discord-api-types/v10";
 import { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
 import { SlashCommand } from "../SlashCommand";
@@ -48,6 +49,10 @@ export class InviteCommand extends SlashCommand {
 
 	protected override async execute(interaction: ChatInputCommandInteraction<"cached">): Promise<void> {
 		const channel = interaction.options.getChannel("channel", true, [ChannelType.GuildText]);
+		if (!isAllowedChannel(channel)) {
+			await interaction.reply({ content: "Choose a channel in category 1551342799276875907.", ephemeral: true });
+			return;
+		}
 		const maxUses = interaction.options.getInteger("uses", false) ?? 1;
 		const quantity = interaction.options.getInteger("quantity", false) ?? 1;
 		if (quantity > 1) {

@@ -162,6 +162,58 @@ export async function addPreCheckinTournament(
 	return { success: true, phase: TournamentPhase.PRE_CHECKIN, customName, userId };
 }
 
+export type LinkBracketResult =
+	| { ok: false; error: string }
+	| { ok: true; tournament: ChallongeTournament; challongeId: string; url: string; already: boolean };
+
+/**
+ * Attaches a bracket that already exists on Challonge.
+ * The bot does not create one. Schedule sync can run after the id is stored.
+ */
+export async function linkExistingBracket(
+	tournament: ChallongeTournament,
+	url: string,
+	challonge: WebsiteWrapperChallonge
+): Promise<LinkBracketResult> {
+	if (tournament.phase === TournamentPhase.LINKED) {
+		return { ok: false, error: "This tournament was created from a Challonge link. Its link cannot be replaced here." };
+	}
+	let challongeId: string;
+	try {
+		challongeId = extractChallongeId(url.trim());
+	} catch {
+		return { ok: false, error: "Enter a Challonge URL such as https://challonge.com/your-slug." };
+	}
+	if (tournament.challongeTournamentId === challongeId) {
+		return {
+			ok: true,
+			tournament,
+			challongeId,
+			url: `https://challonge.com/${challongeId}`,
+			already: true
+		};
+	}
+	if (tournament.challongeTournamentId) {
+		return { ok: false, error: "This tournament already has a different Challonge link." };
+	}
+	try {
+		await challonge.getTournament(challongeId);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : "Challonge rejected that tournament.";
+		return { ok: false, error: `Could not read that Challonge tournament. ${message}` };
+	}
+	tournament.challongeTournamentId = challongeId;
+	tournament.phase = TournamentPhase.BRACKET_CREATED;
+	await tournament.save();
+	return {
+		ok: true,
+		tournament,
+		challongeId,
+		url: `https://challonge.com/${challongeId}`,
+		already: false
+	};
+}
+
 export type CheckinActionResult =
 	| { ok: false; error: string }
 	| { ok: true; tournament: ChallongeTournament; teams: string[]; already: boolean };
@@ -216,6 +268,24 @@ export async function checkInTeam(
 		return { ok: true, tournament, teams: tournament.checkedInTeams, already: true };
 	}
 	tournament.checkedInTeams = [...tournament.checkedInTeams, team].sort((a, b) => a.localeCompare(b));
+	await tournament.save();
+	return { ok: true, tournament, teams: tournament.checkedInTeams, already: false };
+}
+
+/**
+ * Records every enrolled team that is not already checked in.
+ */
+export async function checkInAllTeams(tournament: ChallongeTournament): Promise<CheckinActionResult> {
+	if (tournament.phase !== TournamentPhase.CHECKIN_OPEN) {
+		return { ok: false, error: `Check-in is not open for **${tournament.name}**.` };
+	}
+	const players = await EnrolledPlayer.find({ where: { tournamentId: tournament.tournamentId } });
+	const present = new Set(tournament.checkedInTeams.map(team => team.toLowerCase()));
+	const missing = enrolledTeams(players).filter(team => !present.has(team.toLowerCase()));
+	if (missing.length === 0) {
+		return { ok: true, tournament, teams: tournament.checkedInTeams, already: true };
+	}
+	tournament.checkedInTeams = [...tournament.checkedInTeams, ...missing].sort((a, b) => a.localeCompare(b));
 	await tournament.save();
 	return { ok: true, tournament, teams: tournament.checkedInTeams, already: false };
 }
@@ -481,7 +551,7 @@ export async function syncTournamentWithChallonge(
 		const participantLimit = tournamentData.signupCap ?? 0;
 
 		// Update tournament in database
-		tournament.name = tournamentData.name;
+		tournament.name = tournament.displayNameOverride || tournamentData.name;
 		tournament.description = tournamentData.desc;
 		if (status) tournament.status = status;
 		if (format) tournament.format = format;

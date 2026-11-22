@@ -1,222 +1,95 @@
+import { indexMemberNames, matchMemberName, MemberNameIndex } from "../util/memberNames";
 import { EmbedBuilder } from "discord.js";
+import { In } from "typeorm";
 import { CommandDefinition } from "../Command";
-import { EnrolledPlayer } from "../database/orm/EnrolledPlayer";
-import { ChallongeTournament } from "../database/orm/ChallongeTournament";
+import { EnrolledPlayer, ChallongeTournament } from "../database/orm";
 import { getLogger } from "../util/logger";
 import { isTournamentHost } from "../util/discord";
-import { assignParticipantRole, getParticipantRoleName } from "../util";
-import { resolveTournamentId } from "../util/tournament";
+import { assignParticipantRole, getParticipantRoleName } from "../util/roles";
+import { parseDiscordId } from "../util/discordId";
 import { addUserToMatchThreads } from "../util/matchThreads";
 
 const logger = getLogger("command:sync-roles");
-
 const command: CommandDefinition = {
-	name: "sync-roles",
-	requiredArgs: [],
-	optionalArgs: ["id"],
+	name: "sync-roles", requiredArgs: [], optionalArgs: ["id"],
 	executor: async (msg, args, support) => {
-		// Verify user is a TO
-		const [providedId] = args;
-		let targetTournamentId: string | null = null;
-
-		// If tournament ID is provided, validate it
-		if (providedId) {
-			targetTournamentId = await resolveTournamentId(providedId, msg.guildId);
+		if (!msg.guildId) return;
+		const tournaments = await ChallongeTournament.find({ where: { owningDiscordServer: msg.guildId } });
+		const allowed: string[] = [];
+		for (const tournament of tournaments) {
+			if (args[0] && tournament.tournamentId !== args[0]) continue;
 			try {
-				const tournament = await support.database.authenticateHost(
-					targetTournamentId,
-					msg.author.id,
-					msg.guildId,
-					undefined,
-					isTournamentHost(msg.member, targetTournamentId)
-				);
-				logger.info(`Starting role sync for tournament: ${tournament.name} (${targetTournamentId})`);
-			} catch (err) {
-				await msg.reply("You are not authorized to sync roles for this tournament.");
-				return;
-			}
-		} else {
-			// Check if user is a TO for any tournament
-			const tournaments = await ChallongeTournament.find({
-				where: { owningDiscordServer: msg.guildId! }
-			});
-
-			if (tournaments.length === 0) {
-				await msg.reply("No tournaments found in this server.");
-				return;
-			}
-
-			// Check if user is authorized for at least one tournament
-			let isAuthorized = false;
-			for (const t of tournaments) {
-				try {
-					await support.database.authenticateHost(
-						t.tournamentId,
-						msg.author.id,
-						msg.guildId,
-						undefined,
-						isTournamentHost(msg.member, t.tournamentId)
-					);
-					isAuthorized = true;
-					break;
-				} catch {
-					// Continue checking other tournaments
-				}
-			}
-
-			if (!isAuthorized) {
-				await msg.reply("You must be a Tournament Organizer to use this command.");
-				return;
-			}
+				await support.database.authenticateHost(tournament.tournamentId, msg.author.id, msg.guildId,
+					undefined, isTournamentHost(msg.member, tournament.tournamentId));
+				allowed.push(tournament.tournamentId);
+			} catch { /* Each tournament requires its own authorization. */ }
 		}
-
-		// Send initial message
-		const initialMsg = await msg.reply(
-			targetTournamentId
-				? `🔄 Syncing roles for tournament... This may take a moment.`
-				: `🔄 Syncing roles for all tournaments... This may take a moment.`
-		);
-
+		if (!allowed.length) {
+			await msg.reply("No authorized tournaments found for role sync in this server.");
+			return;
+		}
+		const progress = await msg.reply("Matching imported Discord IDs and names, then syncing participant roles…");
 		try {
-			// Fetch verified players
-			const whereClause: any = { verified: true };
-			if (targetTournamentId) {
-				whereClause.tournamentId = targetTournamentId;
+			const players = await EnrolledPlayer.find({ where: { tournamentId: In(allowed) }, relations: ["tournament"] });
+			const guild = await msg.client.guilds.fetch(msg.guildId);
+			let names: MemberNameIndex | undefined;
+			if (players.some(player => !player.discordId && player.discordUsername && !parseDiscordId(player.discordUsername))) {
+				try {
+					// Fetch the complete server roster; a partial cache could hide ambiguous names.
+					names = indexMemberNames((await guild.members.fetch()).values());
+				} catch (error) { logger.error("Could not load members for name matching:", error); }
 			}
-
-			const verifiedPlayers = await EnrolledPlayer.find({
-				where: whereClause,
-				relations: ["tournament"]
-			});
-
-			if (verifiedPlayers.length === 0) {
-				await initialMsg.edit("No verified players found in the database.");
-				return;
-			}
-
-			let totalSuccess = 0;
-			let totalFailed = 0;
-			let totalThreadsAdded = 0;
+			let verified = 0, roles = 0, threads = 0, skipped = 0, failed = 0, unchanged = 0;
 			const failures: string[] = [];
-
-			// Group players by guild and tournament
-			const playersByGuild = new Map<string, EnrolledPlayer[]>();
-			for (const player of verifiedPlayers) {
-				// Skip players without a tournament relation
-				if (!player.tournament) {
-					logger.warn(`Player ${player.name} (${player.discordId}) has no tournament relation, skipping`);
-					totalFailed++;
-					failures.push(`${player.name} - No tournament relation`);
-					continue;
-				}
-
-				const guildId = player.tournament.owningDiscordServer;
-				if (!playersByGuild.has(guildId)) {
-					playersByGuild.set(guildId, []);
-				}
-				playersByGuild.get(guildId)!.push(player);
-			}
-
-			// Process each guild
-			for (const [guildId, players] of playersByGuild.entries()) {
-				const guild = await msg.client.guilds.fetch(guildId).catch(() => null);
-				if (!guild) {
-					logger.warn(`Could not fetch guild ${guildId}`);
-					totalFailed += players.length;
-					failures.push(`Guild ${guildId} - Could not fetch guild`);
-					continue;
-				}
-
-				// Process players with delay for rate limiting
-				for (const player of players) {
-					if (!player.discordId) continue;
-
-					// Skip players without a tournament relation
-					if (!player.tournament) {
-						logger.warn(`Player ${player.name} (${player.discordId}) has no tournament relation, skipping`);
-						totalFailed++;
-						failures.push(`${player.name} - No tournament relation`);
-						continue;
+			for (const player of players) {
+				// Also recognize numeric IDs stored in the username column by older team imports.
+				const id = player.discordId ? parseDiscordId(player.discordId) : parseDiscordId(player.discordUsername);
+				if (!player.discordId && !player.discordUsername?.trim()) { skipped++; continue; }
+				if (!player.tournament || player.tournament.owningDiscordServer !== msg.guildId) { skipped++; continue; }
+				try {
+					if (player.discordId && !id) throw new Error("Invalid saved Discord ID");
+					if (!id && !names) throw new Error("Full member list unavailable; name matching was not attempted");
+					const member = id ? await guild.members.fetch(id) : matchMemberName(names!, player.discordUsername!);
+					if (member.user.bot) { skipped++; continue; }
+					const hasRole = member.roles.cache.some(role => role.name === getParticipantRoleName(player.tournament));
+					if (!hasRole) {
+						if (!await assignParticipantRole(member, player.tournament, logger, support.participantRole)) {
+							throw new Error("Could not assign participant role");
+						}
+						roles++;
 					}
-
-					try {
-						const member = await guild.members.fetch(player.discordId).catch(() => null);
-						if (!member) {
-							logger.verbose(`User ${player.discordId} not found in guild ${guildId}`);
-							totalFailed++;
-							failures.push(`${player.name} (${player.discordId}) - User not in server`);
-							continue;
-						}
-
-						// Check if user has the role
-						const roleName = getParticipantRoleName(player.tournament);
-						const hasRole = member.roles.cache.some(r => r.name === roleName);
-
-						if (!hasRole) {
-							const roleAssigned = await assignParticipantRole(member, player.tournament, logger, support.participantRole);
-							if (roleAssigned) {
-								totalSuccess++;
-								logger.info(`Restored role for ${player.name} in ${player.tournament.name}`);
-							} else {
-								totalFailed++;
-								failures.push(`${player.name} - Failed to assign role`);
-							}
-						}
-
-						// Add user to match threads if they were missed
-						try {
-							const threadsAdded = await addUserToMatchThreads(guild, player, support.challonge);
-							if (threadsAdded > 0) {
-								totalThreadsAdded += threadsAdded;
-								logger.info(`Added ${player.name} to ${threadsAdded} match thread(s)`);
-							}
-						} catch (err) {
-							logger.error(`Failed to add ${player.name} to match threads:`, err);
-						}
-					} catch (err) {
-						logger.error(`Error processing player ${player.name}:`, err);
-						totalFailed++;
-						failures.push(`${player.name} - ${err instanceof Error ? err.message : 'Unknown error'}`);
-					}
-
-					// Small delay to avoid rate limits
-					await new Promise(resolve => setTimeout(resolve, 100));
+					const wasVerified = player.verified;
+					// Verification succeeds only after an unambiguous member match and role checks pass.
+					player.discordId = member.id;
+					player.discordUsername = member.user.username;
+					player.verified = true;
+					player.otp = null;
+					await player.save();
+					if (!wasVerified) verified++;
+					else if (hasRole) unchanged++;
+					try { threads += await addUserToMatchThreads(guild, player, support.challonge); }
+					catch (error) { logger.error("Could not restore match-thread access:", error); failures.push(`${player.name || player.team}: thread access failed`); }
+				} catch (error) {
+					failed++;
+					failures.push(`${player.name || player.team}: ${error instanceof Error ? error.message : "Member or role unavailable"}`);
 				}
 			}
-
-			// Build results embed
-			const embed = new EmbedBuilder()
-				.setTitle("Role & Thread Sync Complete")
-				.setColor(totalSuccess > 0 || totalThreadsAdded > 0 ? 0x00ff00 : 0xff0000)
+			const embed = new EmbedBuilder().setTitle("Verification & Role Sync Complete").setColor(failed ? 0xf1c40f : 0x00b894)
+				.setDescription(`Processed ${players.length} player records in ${allowed.length} authorized tournament(s) in this server.`)
 				.addFields(
-					{ name: "✅ Roles Synced", value: totalSuccess.toString(), inline: true },
-					{ name: "🧵 Threads Added", value: totalThreadsAdded.toString(), inline: true },
-					{ name: "❌ Failed", value: totalFailed.toString(), inline: true }
+					{ name: "Newly verified", value: String(verified), inline: true },
+					{ name: "Roles assigned", value: String(roles), inline: true },
+					{ name: "Threads added", value: String(threads), inline: true },
+					{ name: "Already verified with role", value: String(unchanged), inline: true },
+					{ name: "Skipped (no Discord value or bot)", value: String(skipped), inline: true },
+					{ name: "Failed", value: String(failed), inline: true }
 				);
-
-			if (targetTournamentId) {
-				const tournament = await ChallongeTournament.findOne({ where: { tournamentId: targetTournamentId } });
-				embed.addFields({ name: "Tournament", value: tournament?.name || targetTournamentId, inline: true });
-			} else {
-				embed.addFields({ name: "Scope", value: "All tournaments", inline: true });
-			}
-
-			if (failures.length > 0 && failures.length <= 10) {
-				embed.addFields({ name: "Failures", value: failures.join("\n"), inline: false });
-			} else if (failures.length > 10) {
-				embed.addFields({
-					name: "Failures (first 10)",
-					value: failures.slice(0, 10).join("\n") + `\n...and ${failures.length - 10} more`,
-					inline: false
-				});
-			}
-
-			await initialMsg.edit({ content: "", embeds: [embed] });
-		} catch (err) {
-			logger.error("Error during role sync:", err);
-			await initialMsg.edit(`An error occurred during role sync: ${err instanceof Error ? err.message : 'Unknown error'}`);
+			if (failures.length) embed.addFields({ name: "Issues (first 10)", value: failures.slice(0, 10).join("\n").slice(0, 1024) });
+			await progress.edit({ content: "", embeds: [embed] });
+		} catch (error) {
+			logger.error("Role sync failed:", error);
+			await progress.edit("Role sync could not finish. Please check the bot's member and role permissions.");
 		}
 	}
 };
-
 export default command;

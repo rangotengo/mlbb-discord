@@ -56,8 +56,7 @@ async function refreshAccessToken(): Promise<void> {
     if (!isTokenExpired()) return;
 
     if (!credentials) {
-        logger.error('Google credentials not configured');
-        return;
+        throw new Error('Google email credentials are not configured');
     }
 
     logger.info('Google API access token expired. Refreshing token.');
@@ -71,14 +70,14 @@ async function refreshAccessToken(): Promise<void> {
 
     try {
         const response = await fetch(credentials.tokenUri, {
+            signal: AbortSignal.timeout(15000),
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: payload.toString(),
         });
 
         if (!response.ok) {
-            logger.error('Failed to refresh access token');
-            return;
+            throw new Error(`Google OAuth token refresh failed (HTTP ${response.status})`);
         }
 
         const responseJson = await response.json() as { access_token: string, expires_in: number };
@@ -87,13 +86,13 @@ async function refreshAccessToken(): Promise<void> {
         expiry = new Date(Date.now() + (expiry_in - 180) * 1000);
     } catch (error) {
         logger.error('Exception while refreshing access token:', error);
+        throw error;
     }
 }
 
 export async function sendEmail(to: string, otp: number): Promise<void> {
     if (!credentials) {
-        logger.error('Cannot send email: Google credentials not configured');
-        return;
+        throw new Error('Google email credentials are not configured');
     }
 
     await refreshAccessToken();
@@ -114,6 +113,7 @@ export async function sendEmail(to: string, otp: number): Promise<void> {
 
     try {
         const response = await fetch('https://www.googleapis.com/gmail/v1/users/me/messages/send', {
+            signal: AbortSignal.timeout(15000),
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${access_token}`,
@@ -125,9 +125,10 @@ export async function sendEmail(to: string, otp: number): Promise<void> {
         if (response.ok) {
             logger.info(`Mail successfully sent to: ${to}, Subject: ${subject}`);
         } else {
-            logger.error(`Error sending email to: ${to}`);
+            throw new Error(`Gmail rejected the email (HTTP ${response.status})`);
         }
     } catch (error) {
         logger.error(`Exception while sending email to ${to}:`, error);
+        throw error;
     }
 }

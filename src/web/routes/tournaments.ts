@@ -1,3 +1,6 @@
+import { getConnection } from "typeorm";
+import { editTournament, TournamentEditError } from "../../util/editTournament";
+import { getRuntimeSupport } from "../../util/runtimeSupport";
 import { Router, Request, Response } from "express";
 import { ChallongeTournament } from "../../database/orm/ChallongeTournament";
 import { EnrolledPlayer } from "../../database/orm/EnrolledPlayer";
@@ -5,9 +8,11 @@ import { MatchSchedule } from "../../database/orm/MatchSchedule";
 import {
 	addPreCheckinTournament,
 	addTournament,
+	checkInAllTeams,
 	checkInTeam,
 	createBracketFromCheckin,
 	isPreCheckinName,
+	linkExistingBracket,
 	openPreCheckin,
 	syncTournamentWithChallonge
 } from "../../util/tournament";
@@ -47,8 +52,7 @@ router.get("/api/tournaments", async (req: Request, res: Response) => {
 			tournaments.map(async (t: ChallongeTournament) => {
 				// Get all players for this tournament
 				const players = await EnrolledPlayer.find({
-					where: { tournamentId: t.tournamentId },
-					select: ["team", "verified"]
+					where: { tournamentId: t.tournamentId }
 				});
 
 				// Group by team and determine verification status
@@ -121,8 +125,7 @@ router.get("/api/tournaments/:id", async (req: Request, res: Response) => {
 
 		// Get team verification counts (team is verified if at least 1 player is verified)
 		const players = await EnrolledPlayer.find({
-			where: { tournamentId: id },
-			select: ["team", "verified"]
+			where: { tournamentId: id }
 		});
 
 		const teamMap = new Map<string, boolean>();
@@ -167,6 +170,7 @@ router.get("/api/tournaments/:id", async (req: Request, res: Response) => {
 				unverifiedCount,
 				scheduledCount,
 				checkInDisabled: tournament.checkInDisabled,
+				checkInChannelId: tournament.checkInChannelId,
 				phase: tournament.phase,
 				checkedInTeams: tournament.checkedInTeams || [],
 				hasBracket: tournament.hasChallongeBracket(),
@@ -218,29 +222,53 @@ router.post("/api/tournaments", async (req: Request, res: Response) => {
 
 // API: Update tournament
 router.put("/api/tournaments/:id", async (req: Request, res: Response) => {
+	const renamedRoles: { role: import("discord.js").Role; oldName: string }[] = [];
 	try {
 		const id = getIdParam(req.params);
-		const { name, description, status, participantRoleName } = req.body;
-
-		const tournament = await ChallongeTournament.findOne({
-			where: { tournamentId: id }
+		const updated = await getConnection().transaction(async manager => {
+			const original = await manager.findOne(ChallongeTournament, { where: { tournamentId: id } });
+			const result = await editTournament(manager, id, req.body);
+			if (result.tournamentId !== id && original) {
+				const client = tryGetBotClient();
+				if (!client) throw new TournamentEditError("Bot is not ready. Try renaming again shortly.", 503);
+				const guild = await client.guilds.fetch(result.owningDiscordServer);
+				const roles = await guild.roles.fetch();
+				const suffixes = original.participantRoleName ? ["admin"] : ["player", "admin"];
+				for (const suffix of suffixes) {
+					const oldName = `${id}-${suffix}`, newName = `${result.tournamentId}-${suffix}`;
+					const role = roles.find(r => r.name === oldName);
+					if (!role) continue;
+					if (roles.some(r => r.name === newName && r.id !== role.id)) {
+						throw new TournamentEditError(`A Discord role named ${newName} already exists`, 409);
+					}
+					await role.setName(newName, "Tournament ID changed in dashboard");
+					renamedRoles.push({ role, oldName });
+				}
+			}
+			return result;
 		});
-
-		if (!tournament) {
-			return res.status(404).json({ success: false, error: "Tournament not found" });
+		if (updated.tournamentId !== id) {
+			const support = getRuntimeSupport();
+			support?.participantRole.forget(id);
+			support?.participantRole.forget(updated.tournamentId);
+			support?.hostRole.forget(id);
+			support?.hostRole.forget(updated.tournamentId);
+			support?.timeWizard.renameTournament(id, updated.tournamentId);
+			const scores = support?.scores.get(id);
+			if (scores && support) {
+				support.scores.delete(id);
+				support.scores.set(updated.tournamentId, scores);
+			}
 		}
-
-		if (name !== undefined) tournament.name = name;
-		if (description !== undefined) tournament.description = description;
-		if (status !== undefined) tournament.status = status;
-		if (participantRoleName !== undefined) tournament.participantRoleName = participantRoleName;
-
-		await tournament.save();
-
-		res.json({ success: true, data: { id: tournament.tournamentId } });
+		res.json({ success: true, data: { id: updated.tournamentId, name: updated.name } });
 	} catch (error) {
+		for (const { role, oldName } of renamedRoles.reverse()) {
+			await role.setName(oldName, "Rollback failed tournament rename").catch(logger.error);
+		}
 		logger.error("Failed to update tournament:", error);
-		res.status(500).json({ success: false, error: "Failed to update tournament" });
+		res.status(error instanceof TournamentEditError ? error.status : 500).json({
+			success: false, error: error instanceof TournamentEditError ? error.message : "Failed to update tournament. Check the bot's role permissions."
+		});
 	}
 });
 
@@ -331,6 +359,54 @@ router.post("/api/tournaments/:id/precheckin/teams", async (req: Request, res: R
 	} catch (error) {
 		logger.error("Failed to check in team:", error);
 		res.status(500).json({ success: false, error: "Failed to check in team" });
+	}
+});
+
+router.post("/api/tournaments/:id/precheckin/teams/all", async (req: Request, res: Response) => {
+	try {
+		const tournament = await ChallongeTournament.findOne({ where: { tournamentId: getIdParam(req.params) } });
+		if (!tournament) return res.status(404).json({ success: false, error: "Tournament not found" });
+		const result = await checkInAllTeams(tournament);
+		if (!result.ok) return res.status(400).json({ success: false, error: result.error });
+		res.json({ success: true, already: result.already, teams: result.teams });
+	} catch (error) {
+		logger.error("Failed to check in all teams:", error);
+		res.status(500).json({ success: false, error: "Failed to check in teams" });
+	}
+});
+
+router.get("/api/tournaments/:id/precheckin/export", async (req: Request, res: Response) => {
+	try {
+		const tournament = await ChallongeTournament.findOne({ where: { tournamentId: getIdParam(req.params) } });
+		if (!tournament) return res.status(404).json({ success: false, error: "Tournament not found" });
+		const players = await EnrolledPlayer.find({ where: { tournamentId: tournament.tournamentId, verified: true } });
+		const teams = [...new Set(players.map(player => player.team).filter(team => team.length > 0))].sort((a, b) => a.localeCompare(b));
+		const csv = ["Team Name", ...teams.map(team => `"${team.replace(/"/g, '""')}"`)].join("\n");
+		res.setHeader("Content-Type", "text/csv; charset=utf-8");
+		res.setHeader("Content-Disposition", `attachment; filename="${tournament.tournamentId}-checked-in-teams.csv"`);
+		res.send(csv);
+	} catch (error) {
+		logger.error("Failed to export checked-in teams:", error);
+		res.status(500).json({ success: false, error: "Failed to export checked-in teams" });
+	}
+});
+
+router.post("/api/tournaments/:id/precheckin/link", async (req: Request, res: Response) => {
+	try {
+		const tournament = await ChallongeTournament.findOne({ where: { tournamentId: getIdParam(req.params) } });
+		if (!tournament) return res.status(404).json({ success: false, error: "Tournament not found" });
+		const result = await linkExistingBracket(tournament, String(req.body?.url || ""), challongeClient());
+		if (!result.ok) return res.status(400).json({ success: false, error: result.error });
+		res.json({
+			success: true,
+			already: result.already,
+			challongeId: result.challongeId,
+			url: result.url,
+			phase: tournament.phase
+		});
+	} catch (error) {
+		logger.error("Failed to link existing bracket:", error);
+		res.status(500).json({ success: false, error: "Failed to link Challonge bracket" });
 	}
 });
 

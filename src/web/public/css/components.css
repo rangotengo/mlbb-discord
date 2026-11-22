@@ -900,6 +900,7 @@ code {
 	font-weight: 500;
 	cursor: pointer;
 	text-decoration: none;
+	white-space: nowrap;
 }
 .row-menu-panel button:hover,
 .row-menu-panel a:hover { background: var(--bg-elevated); }
@@ -916,3 +917,24 @@ code {
 .checkin-switch input { accent-color: var(--accent); width: 16px; height: 16px; }
 .num-ok { color: var(--success); }
 .num-warn { color: var(--warning); }
+
+/* Top-layer tournament actions escape the table's horizontal scroll clipping. */
+.tournament-actions-popover {
+	position: fixed;
+	inset: auto;
+	margin: 0;
+	width: max-content;
+	min-width: 220px;
+	max-width: calc(100vw - 16px);
+	max-height: calc(100vh - 16px);
+	overflow-y: auto;
+}
+.tournament-action-trigger {
+	cursor: pointer;
+	padding: 4px 10px;
+	border: 1px solid var(--border-medium);
+	border-radius: var(--radius-sm);
+	background: var(--bg-elevated);
+	color: var(--text-primary);
+	font-size: 16px;
+}

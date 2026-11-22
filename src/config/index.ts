@@ -30,9 +30,19 @@ if (configPath) {
 	}
 }
 
-// Fallback to dotenv if not using JSON config
+// Fallback to dotenv if not using JSON config.
+// Production persists Settings edits in the data directory, not /app/.env.
 if (!useJsonConfig) {
-	dotenv.config();
+	const fs = require("fs") as typeof import("fs");
+	const path = require("path") as typeof import("path");
+	const dataEnv = path.resolve(
+		process.env.SQLITE_DB ? path.dirname(process.env.SQLITE_DB) : path.join(process.cwd(), "data"),
+		".env"
+	);
+	if (fs.existsSync(dataEnv)) {
+		dotenv.config({ path: dataEnv, override: true, quiet: true });
+	}
+	dotenv.config({ quiet: true });
 }
 
 function assertEnv(envvar: string): string {
@@ -96,7 +106,7 @@ Your friendly tournament management bot for Discord!
 
 **🔧 Utility:**
 • \`!coin\` / \`!toss\` - Flip a coin
-• \`!close\` - Close an onboarding ticket channel (TO only)
+• \`!close\` - Close a private verification thread (TO only)
 
 **💡 Tip:** The \`id\` parameter is optional when there's only one tournament in the server!
 

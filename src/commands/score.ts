@@ -1,3 +1,4 @@
+import { isAllowedChannel } from "../util/channelScope";
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, EmbedBuilder, ButtonInteraction } from "discord.js";
 import { CommandDefinition } from "../Command";
 import { TournamentStatus } from "../database/interface";
@@ -7,7 +8,8 @@ import { findMatch } from "../util/challonge";
 import { UserError } from "../util/errors";
 import { getLogger } from "../util/logger";
 import { resolveTournamentId } from "../util/tournament";
-import { isTournamentOrganizer, parseScore } from "../util";
+import { isTournamentOrganizer, parseScore, assignParticipantRole, addUserToMatchThreads } from "../util";
+import { findLinkedEnrollment } from "../util/enrolledPlayers";
 
 const logger = getLogger("command:score");
 
@@ -47,13 +49,15 @@ const command: CommandDefinition = {
 			);
 		}
 
-		const enrolledPlayer = await EnrolledPlayer.findOne({ 
-			where: { discordId: msg.author.id, tournamentId: id },
-			relations: ["tournament"]
-		});
+		const { player: enrolledPlayer, newlyLinked } = await findLinkedEnrollment(msg.author.id, id, msg.author.username);
 
 		if (!enrolledPlayer || !enrolledPlayer.verified) {
 			throw new UserError("You must be enrolled and verified to report scores.");
+		}
+
+		if (newlyLinked && msg.member && msg.guild) {
+			await assignParticipantRole(msg.member, enrolledPlayer.tournament, logger, support.participantRole);
+			await addUserToMatchThreads(msg.guild, enrolledPlayer, support.challonge);
 		}
 
 		if (enrolledPlayer.tournament.status !== TournamentStatus.IPR) {
@@ -154,7 +158,7 @@ const command: CommandDefinition = {
 
 				if (tDB?.scoreReviewChannelId) {
 					const reviewChannel = await msg.guild?.channels.fetch(tDB.scoreReviewChannelId).catch(() => null);
-					if (reviewChannel && reviewChannel.isTextBased()) {
+					if (reviewChannel && reviewChannel.isTextBased() && isAllowedChannel(reviewChannel)) {
 						const reviewEmbed = new EmbedBuilder()
 							.setTitle(`Pending Score: Match ${match.matchId}`)
 							.setDescription(`**Reporter:** <@${msg.author.id}>\n**Score:** ${scores[0]} - ${scores[1]}\n**Match URL:** [Jump to Thread](${prompt.url})`)

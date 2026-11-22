@@ -23,6 +23,10 @@ export class HostRoleProvider {
 
 	constructor(protected readonly bot: Client, readonly color?: number) {}
 
+	public forget(tournamentId: string): void {
+		delete this.roleCache[tournamentId];
+	}
+
 	/**
 	 * Creates the host/admin role in question on the specified server for the specified tournament.
 	 *

@@ -102,6 +102,10 @@ export class PersistentTimer {
 		return active;
 	}
 
+	public renameTournament(id: string): void {
+		this.entity.tournamentId = id;
+	}
+
 	public get tournament(): string | undefined {
 		return this.entity.tournamentId;
 	}

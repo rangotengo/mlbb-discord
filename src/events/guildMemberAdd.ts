@@ -13,6 +13,7 @@ import { ChallongeTournament } from "../database/orm/ChallongeTournament";
 import { getLogger } from "../util/logger";
 import { assignParticipantRole, TICKETS_CATEGORY_NAME, TICKET_CHANNEL_PREFIX } from "../util";
 import { addUserToMatchThreads } from "../util/matchThreads";
+import { enrollmentMatchesDiscord, expandEnrollmentsByEmail, selectActionableEnrollments } from "../util/enrolledPlayers";
 
 const logger = getLogger("event:guildMemberAdd");
 
@@ -54,64 +55,55 @@ export function makeHandler(_support: CommandSupport) {
 			if (member.user.globalName) matchForms.push(member.user.globalName.toLowerCase());
 			if (member.displayName) matchForms.push(member.displayName.toLowerCase());
 
-			const matchedPlayer = enrolledPlayers.find(
-				p => p.discordUsername && matchForms.includes(p.discordUsername.toLowerCase())
-			);
+			const directMatches = enrolledPlayers.filter(player => enrollmentMatchesDiscord(player, member.id, matchForms));
+			const matchedPlayers = expandEnrollmentsByEmail(directMatches, enrolledPlayers);
 
-			if (matchedPlayer) {
-				// If tournament relation is not loaded, fetch it manually
-				if (!matchedPlayer.tournament) {
-					const tournament = await ChallongeTournament.findOne({
-						where: { tournamentId: matchedPlayer.tournamentId }
-					});
-					if (!tournament) {
-						logger.error(`Could not find tournament with ID ${matchedPlayer.tournamentId}`);
-						return;
+			if (matchedPlayers.length) {
+				const tournamentMap = new Map(tournaments.map(tournament => [tournament.tournamentId, tournament]));
+				for (const player of matchedPlayers) {
+					if (!player.tournament) {
+						const tournament = tournamentMap.get(player.tournamentId);
+						if (!tournament) {
+							logger.error(`Could not find tournament with ID ${player.tournamentId}`);
+							continue;
+						}
+						player.tournament = tournament;
 					}
-					matchedPlayer.tournament = tournament;
 				}
 
-				if (!matchedPlayer.verified) {
-					// Local-only verification as per the new team-focused plan
-					try {
-						matchedPlayer.verified = true;
-						matchedPlayer.discordId = member.id;
-						matchedPlayer.discordUsername = member.user.username;
-						await matchedPlayer.save();
+				const { actionable, closed } = selectActionableEnrollments(matchedPlayers, tournamentMap);
+				if (closed || !actionable.length) return;
 
-						// Assign participant role
-						const roleAssigned = await assignParticipantRole(member, matchedPlayer.tournament, logger, _support.participantRole);
-						if (!roleAssigned) {
-							logger.warn(`Failed to assign participant role to ${member.user.tag} on guild join`);
+				for (const player of actionable) {
+					if (!player.tournament) continue;
+					if (!player.verified) {
+						try {
+							player.verified = true;
+							player.discordId = member.id;
+							player.discordUsername = member.user.username;
+							player.otp = null;
+							await player.save();
+
+							const roleAssigned = await assignParticipantRole(member, player.tournament, logger, _support.participantRole);
+							if (!roleAssigned) logger.warn(`Failed to assign participant role to ${member.user.tag} on guild join`);
+
+							const threadsAdded = await addUserToMatchThreads(member.guild, player, _support.challonge);
+							if (threadsAdded > 0) logger.info(`Added ${member.user.tag} to ${threadsAdded} match thread(s) via guild join`);
+							logger.info(`Successfully auto-verified member ${member.user.tag} (Local Check)`);
+						} catch (err) {
+							logger.error(`Error during local auto-verification for ${member.user.tag}:`, err);
 						}
+					} else {
+						const roleAssigned = await assignParticipantRole(member, player.tournament, logger, _support.participantRole);
+						if (!roleAssigned) logger.warn(`Failed to assign participant role to already-verified ${member.user.tag} on guild join`);
 
-						// Add user to existing match threads
-						const threadsAdded = await addUserToMatchThreads(member.guild, matchedPlayer, _support.challonge);
-						if (threadsAdded > 0) {
-							logger.info(`Added ${member.user.tag} to ${threadsAdded} match thread(s) via guild join`);
-						}
-
-						logger.info(`Successfully auto-verified member ${member.user.tag} (Local Check)`);
-					} catch (err) {
-						logger.error(`Error during local auto-verification for ${member.user.tag}:`, err);
+						const threadsAdded = await addUserToMatchThreads(member.guild, player, _support.challonge);
+						if (threadsAdded > 0) logger.info(`Added ${member.user.tag} to ${threadsAdded} match thread(s) via guild join (already verified)`);
+						logger.info(`Member ${member.user.tag} is already verified, assigned role`);
 					}
-				} else {
-					// Player is already verified, just assign the role
-					const roleAssigned = await assignParticipantRole(member, matchedPlayer.tournament, logger, _support.participantRole);
-					if (!roleAssigned) {
-						logger.warn(`Failed to assign participant role to already-verified ${member.user.tag} on guild join`);
-					}
-
-					// Also try to add to match threads in case they were missed
-					const threadsAdded = await addUserToMatchThreads(member.guild, matchedPlayer, _support.challonge);
-					if (threadsAdded > 0) {
-						logger.info(`Added ${member.user.tag} to ${threadsAdded} match thread(s) via guild join (already verified)`);
-					}
-
-					logger.info(`Member ${member.user.tag} is already verified, assigned role`);
 				}
 
-				return; // Stop here, don't create a ticket
+				return;
 			}
 
 			// If no match was found or verification failed, open an onboarding ticket

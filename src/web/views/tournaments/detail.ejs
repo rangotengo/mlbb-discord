@@ -35,21 +35,62 @@
 			<div class="info-label">Unverified Teams</div>
 			<div class="info-value num-warn" id="t-unverified-count">&mdash;</div>
 		</div>
+		<div class="info-card">
+			<div class="checkin-card-heading">
+				<div class="info-label">Check-in Channel ID</div>
+				<button class="btn btn-secondary btn-sm" id="checkin-edit" type="button" onclick="editCheckInChannel(true)" aria-controls="checkin-edit-form" aria-expanded="false">Edit</button>
+			</div>
+			<div class="info-value" id="checkin-channel-value">&mdash;</div>
+			<form id="checkin-edit-form" hidden onsubmit="saveCheckInChannel(event)">
+				<label class="form-label" for="checkin-channel">Channel ID</label>
+				<input class="form-input" id="checkin-channel" required pattern="[0-9]{17,20}">
+				<p class="text-secondary">Only this channel accepts check-ins for this tournament.</p>
+				<div class="checkin-card-actions">
+					<button class="btn btn-primary btn-sm" id="checkin-save" type="submit">Save</button>
+					<button class="btn btn-secondary btn-sm" id="checkin-cancel" type="button" onclick="editCheckInChannel(false)">Cancel</button>
+				</div>
+			</form>
+		</div>
 	</div>
 
 	<section class="card precheckin-panel" id="precheckin-panel" hidden>
 		<div class="precheckin-heading">
 			<div>
-				<h3>Team check-in</h3>
-				<p id="precheckin-summary" class="text-secondary">This tournament has no Challonge bracket yet.</p>
+				<h3>Verified teams</h3>
+				<p id="precheckin-summary" class="text-secondary">Teams with at least one player verified by Discord identity.</p>
 			</div>
 			<div class="precheckin-actions">
-				<button class="btn btn-secondary" id="precheckin-open" type="button" onclick="openPreCheckin()">Open check-in</button>
-				<button class="btn btn-primary" id="precheckin-close" type="button" onclick="closePreCheckin()">Create bracket</button>
+				<button class="btn btn-secondary" id="precheckin-copy" type="button" onclick="copyCheckedInTeams()" hidden>Copy team names</button>
+				<a class="btn btn-primary" id="precheckin-export" hidden>Download team names</a>
 			</div>
 		</div>
 		<ul class="precheckin-teams" id="precheckin-teams"></ul>
+		<form id="precheckin-link-form" class="precheckin-link" hidden onsubmit="linkExistingBracket(event)">
+			<label class="form-label" for="precheckin-url">Existing Challonge URL</label>
+			<div class="precheckin-link-row">
+				<input class="form-input" id="precheckin-url" type="url" required placeholder="https://challonge.com/your-slug">
+				<button class="btn btn-primary" id="precheckin-link" type="submit">Link bracket</button>
+			</div>
+			<p class="text-secondary">Paste a bracket you already created. The bot stores the link so schedule sync can use it. It does not create a new bracket.</p>
+		</form>
 	</section>
+
+	<details class="card round-announcement">
+		<summary>Round announcement</summary>
+	<form class="announcement-form" onsubmit="sendRoundAnnouncement(event)">
+		<p class="text-secondary">Send a message to the match threads recorded for the selected round.</p>
+		<label class="form-label" for="announcement-round">Round</label>
+		<select class="form-input" id="announcement-round" required onchange="updateAnnouncementCount()">
+			<option value="">Choose a round</option>
+		</select>
+		<p id="announcement-targets" aria-live="polite">Choose a round to see the thread count.</p>
+		<label class="form-label" for="announcement-message">Announcement</label>
+		<textarea class="form-input" id="announcement-message" rows="5" maxlength="2000" required placeholder="Write your announcement..."></textarea>
+		<p class="text-secondary">Mentions are displayed without sending notifications.</p>
+		<button class="btn btn-primary" id="announcement-send" type="submit" disabled>Send to selected round</button>
+		<p id="announcement-result" role="status" style="white-space: pre-wrap"></p>
+	</form>
+	</details>
 
 	<!-- Tabs Container -->
 	<div class="detail-tabs">
@@ -144,7 +185,7 @@
 			<!-- Upload Section -->
 			<div id="csv-upload-section">
 				<div id="csv-dropzone" class="csv-dropzone">
-					<input type="file" id="csv-file-input" accept=".csv" style="display: none;" onchange="handleCSVFileSelect(event)">
+					<input type="file" id="csv-file-input" accept=".csv,.tsv" style="display: none;" onchange="handleCSVFileSelect(event)">
 					<div class="dropzone-content">
 						<div class="dropzone-icon"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg></div>
 						<p class="dropzone-text">Drag & drop your CSV file here</p>
@@ -491,6 +532,23 @@ Team Alpha,p1@example.com,player1,Player One,p2@example.com,player2,Player Two,,
 	display: flex;
 	gap: 12px;
 }
+
+#checkin-edit[hidden], #checkin-channel-value[hidden], #checkin-edit-form[hidden] { display: none; }
+.checkin-card-heading, .checkin-card-actions {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+.checkin-card-actions { justify-content: flex-start; }
+.checkin-card-heading { margin-bottom: 6px; flex-wrap: wrap; }
+.checkin-card-heading .info-label { min-width: 0; flex: 1 1 120px; margin-bottom: 0; }
+.checkin-card-heading .btn { flex: 0 0 auto; padding: 4px 10px; }
+#checkin-channel-value, #t-server { font-size: 16px; text-align: left; overflow-wrap: anywhere; }
+.round-announcement.card { padding: 0; margin-bottom: 16px; }
+.round-announcement summary { cursor: pointer; padding: 12px 16px; font-size: 16px; line-height: 1.4; font-weight: 600; }
+.round-announcement summary:focus-visible { outline: 2px solid var(--text-secondary); outline-offset: 6px; }
+.announcement-form { margin: 0; padding: 0 16px 16px; }
 
 .info-grid {
 	display: grid;
@@ -954,6 +1012,45 @@ document.addEventListener('DOMContentLoaded', () => {
 	}
 });
 
+let announcementSchedules = [];
+function renderAnnouncementRounds(schedules) {
+	announcementSchedules = schedules;
+	const select = document.getElementById('announcement-round');
+	const previous = select.value;
+	select.replaceChildren(new Option('Choose a round', ''));
+	const rounds = [...new Set(schedules.map(s => s.round).filter(r => Number.isInteger(r) && r !== 0))].sort((a, b) => a - b);
+	for (const round of rounds) select.add(new Option(`Round ${round}`, String(round)));
+	select.value = previous;
+	updateAnnouncementCount();
+}
+function updateAnnouncementCount() {
+	const selected = document.getElementById('announcement-round').value;
+	const count = new Set(announcementSchedules.filter(s => s.round === Number(selected)).map(s => s.threadId).filter(Boolean)).size;
+	document.getElementById('announcement-targets').textContent = selected ? `Round ${selected}: ${count} match thread(s)` : 'Choose a round to see the thread count.';
+	document.getElementById('announcement-send').disabled = !selected || !count;
+}
+async function sendRoundAnnouncement(event) {
+	event.preventDefault();
+	const button = document.getElementById('announcement-send');
+	if (button.disabled) return;
+	const round = document.getElementById('announcement-round').value;
+	const message = document.getElementById('announcement-message').value.trim();
+	if (!message) return;
+	button.disabled = true;
+	const result = document.getElementById('announcement-result');
+	result.textContent = 'Sending...';
+	try {
+		const response = await Dot.API.post(`/api/tournaments/${tournamentPathId}/rounds/${encodeURIComponent(round)}/announcement`, { message });
+		const { sent, failed, total } = response.data;
+		result.textContent = `Round ${round}: sent to ${sent.length} of ${total} threads.` + (failed.length ? `\nFailed thread IDs: ${failed.join(', ')}. Check these threads before retrying; resending will also repeat successful deliveries.` : '');
+		if (!failed.length) document.getElementById('announcement-message').value = '';
+	} catch (error) {
+		result.textContent = error.message;
+	} finally {
+		updateAnnouncementCount();
+	}
+}
+
 async function loadTournamentData() {
 	try {
 		const [tRes, pRes, sRes] = await Promise.all([
@@ -965,6 +1062,7 @@ async function loadTournamentData() {
 		renderParticipants(pRes.data || []);
 		renderInfo(tRes.data);
 		renderSchedules(sRes.data || []);
+		renderAnnouncementRounds(sRes.data || []);
 	} catch (error) {
 		console.error("Failed to load tournament data:", error);
 		Dot.Toast.error("Failed to load tournament data");
@@ -997,6 +1095,9 @@ function renderInfo(t) {
 	document.getElementById('t-p-count').textContent = t.enrolledCount || 0;
 	document.getElementById('t-s-count').textContent = t.scheduledCount || 0;
 
+	const channelId = t.checkInChannelId || '1566425054168744057';
+	document.getElementById('checkin-channel-value').textContent = channelId;
+	if (document.getElementById('checkin-edit-form').hidden) document.getElementById('checkin-channel').value = channelId;
 	const checkInBox = document.getElementById('checkin-enabled');
 	const checkInLabel = document.getElementById('checkin-label');
 	if (checkInBox) {
@@ -1011,32 +1112,38 @@ let currentTournament = null;
 
 function renderPreCheckin(t) {
 	currentTournament = t;
-	const panel = document.getElementById('precheckin-panel');
-	const waiting = t.phase === 'pre-checkin' || t.phase === 'checkin-open';
-	panel.hidden = !waiting;
 	document.getElementById('btn-sync').hidden = !t.hasBracket;
 	document.getElementById('btn-start-round').hidden = !t.hasBracket;
-	if (!waiting) return;
+	renderVerifiedTeams();
+}
 
-	const teams = t.checkedInTeams || [];
-	const open = t.phase === 'checkin-open';
-	document.getElementById('precheckin-summary').textContent = open
-		? `${teams.length} team(s) checked in. Create the Challonge bracket when attendance is done.`
-		: 'Enroll teams, then open check-in. The bracket is created only from teams that check in.';
-	document.getElementById('precheckin-open').hidden = open;
-	document.getElementById('precheckin-close').disabled = teams.length < 2;
+function verifiedTeamNames() {
+	const rows = [...document.querySelectorAll('#participants-body tr')];
+	return [...new Set(rows.filter(row => row.querySelector('.badge-success')).map(row => {
+		const name = row.querySelector('strong');
+		return name ? name.textContent.trim() : '';
+	}).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+}
+
+function renderVerifiedTeams() {
+	const teams = verifiedTeamNames();
+	const panel = document.getElementById('precheckin-panel');
+	const waitingForBracket = currentTournament && !currentTournament.hasBracket && currentTournament.phase !== 'linked';
+	panel.hidden = teams.length === 0 && !waitingForBracket;
+	document.getElementById('precheckin-summary').textContent = teams.length
+		? `${teams.length} team(s) verified by Discord identity.`
+		: 'No Discord-verified teams yet. You can still link a bracket that already exists on Challonge.';
+	const exportLink = document.getElementById('precheckin-export');
+	exportLink.hidden = teams.length === 0;
+	exportLink.href = `/api/tournaments/${tournamentPathId}/precheckin/export`;
+	document.getElementById('precheckin-copy').hidden = teams.length === 0;
+	const linkForm = document.getElementById('precheckin-link-form');
+	linkForm.hidden = !waitingForBracket;
 	const list = document.getElementById('precheckin-teams');
 	list.replaceChildren();
-	for (const team of enrolledTeamNames()) {
-		const checked = teams.some(name => name.toLowerCase() === team.toLowerCase());
+	for (const team of teams) {
 		const item = document.createElement('li');
-		const button = document.createElement('button');
-		button.type = 'button';
-		button.textContent = checked ? `${team} checked in` : `Check in ${team}`;
-		button.disabled = !open || checked;
-		button.className = checked ? 'is-checked' : '';
-		button.addEventListener('click', () => checkInDashboardTeam(team));
-		item.appendChild(button);
+		item.textContent = team;
 		list.appendChild(item);
 	}
 }
@@ -1044,6 +1151,34 @@ function renderPreCheckin(t) {
 function enrolledTeamNames() {
 	return [...new Set([...document.querySelectorAll('#participants-body tr strong')].map(node => node.textContent.trim()).filter(Boolean))]
 		.sort((a, b) => a.localeCompare(b));
+}
+
+async function copyCheckedInTeams() {
+	const teams = verifiedTeamNames();
+	if (!teams.length) return;
+	try {
+		await navigator.clipboard.writeText(teams.join('\n'));
+		Dot.Toast.success(`${teams.length} team name(s) copied`);
+	} catch (error) {
+		Dot.Toast.error('Could not copy team names');
+	}
+}
+
+async function linkExistingBracket(event) {
+	event.preventDefault();
+	const button = document.getElementById('precheckin-link');
+	const url = document.getElementById('precheckin-url').value.trim();
+	button.disabled = true;
+	try {
+		const response = await Dot.API.post(`/api/tournaments/${tournamentPathId}/precheckin/link`, { url });
+		Dot.Toast.success(response.already ? 'Bracket already linked' : 'Challonge bracket linked');
+		document.getElementById('precheckin-url').value = '';
+		await loadTournamentData();
+	} catch (error) {
+		Dot.Toast.error(error.message || 'Failed to link Challonge bracket');
+	} finally {
+		button.disabled = false;
+	}
 }
 
 async function openPreCheckin() {
@@ -1055,6 +1190,20 @@ async function openPreCheckin() {
 		await loadTournamentData();
 	} catch (error) {
 		Dot.Toast.error(error.message || 'Failed to open check-in');
+	} finally {
+		button.disabled = false;
+	}
+}
+
+async function checkInAllDashboardTeams() {
+	const button = document.getElementById('precheckin-all');
+	button.disabled = true;
+	try {
+		await Dot.API.post(`/api/tournaments/${tournamentPathId}/precheckin/teams/all`);
+		Dot.Toast.success('All enrolled teams checked in');
+		await loadTournamentData();
+	} catch (error) {
+		Dot.Toast.error(error.message || 'Failed to check in teams');
 	} finally {
 		button.disabled = false;
 	}
@@ -1109,6 +1258,7 @@ function renderParticipants(participants) {
 			<td><span class="badge badge-${p.verified ? 'success' : 'warning'}">${p.verified ? 'Verified' : 'Unverified'}</span></td>
 		</tr>
 	`).join('');
+	renderVerifiedTeams();
 }
 
 function renderSchedules(schedules) {
@@ -1193,6 +1343,34 @@ async function syncTournament() {
 		btn.disabled = false;
 		btn.textContent = 'Sync from Challonge';
 	}
+}
+
+function editCheckInChannel(editing) {
+	document.getElementById('checkin-edit-form').hidden = !editing;
+	document.getElementById('checkin-channel-value').hidden = editing;
+	const editButton = document.getElementById('checkin-edit');
+	editButton.hidden = editing;
+	editButton.setAttribute('aria-expanded', String(editing));
+	const input = document.getElementById('checkin-channel');
+	input.value = document.getElementById('checkin-channel-value').textContent;
+	if (editing) input.focus();
+	else editButton.focus();
+}
+async function saveCheckInChannel(event) {
+	event.preventDefault();
+	const input = document.getElementById('checkin-channel');
+	const channelId = input.value.trim();
+	const saveButton = document.getElementById('checkin-save');
+	const cancelButton = document.getElementById('checkin-cancel');
+	saveButton.disabled = true;
+	cancelButton.disabled = true;
+	try {
+		await Dot.API.put(`/api/tournaments/${tournamentPathId}`, { checkInChannelId: channelId });
+		document.getElementById('checkin-channel-value').textContent = channelId;
+		editCheckInChannel(false);
+		Dot.Toast.success('Check-in channel saved');
+	} catch (error) { Dot.Toast.error(error.message || 'Failed to save check-in channel'); }
+	finally { saveButton.disabled = false; cancelButton.disabled = false; }
 }
 
 // Toggle check-in for this tournament
@@ -1338,36 +1516,33 @@ function formatFileSize(bytes) {
 function parseAndPreviewCSV() {
 	if (!currentCSVData) return;
 
-	const lines = currentCSVData.trim().split('\n').map(l => l.trim()).filter(l => l.length > 0);
-
-	if (lines.length < 2) {
-		Dot.Toast.error('CSV must have at least a header and one data row');
+	let rows;
+	try { rows = parseParticipantTable(currentCSVData); }
+	catch (error) { Dot.Toast.error(error.message); return; }
+	if (rows.length < 2) {
+		Dot.Toast.error('File must have a header and at least one data row');
 		return;
 	}
-
-	// Parse header
-	const headers = parseCSVRow(lines[0]);
-	parsedCSVRows = [];
-
-	// Parse data rows
-	for (let i = 1; i < lines.length; i++) {
-		const columns = parseCSVRow(lines[i]);
-		parsedCSVRows.push(columns);
-	}
+	const headers = rows[0];
+	parsedCSVRows = rows.slice(1);
 
 	// Validate headers
-	const expectedCols = currentCSVImportType === 'participants'
-		? ['email', 'name', 'team']
-		: ['match_id', 'scheduled_time'];
-
-	const headersLower = headers.map(h => h.toLowerCase());
-	const missingCols = expectedCols.filter(col => !headersLower.some(h => h.includes(col)));
-
-	if (missingCols.length > 0) {
-		showPreviewWarning(`Missing required columns: ${missingCols.join(', ')}`);
+	const normalized = headers.map(h => h.toLowerCase().replace(/[\s_-]/g, ''));
+	const wide = currentCSVImportType === 'participants' && normalized.some(h => /^(email|discord|name)p\d+$/.test(h));
+	let missingCols;
+	if (wide) {
+		missingCols = normalized.includes('teamname') || normalized.includes('team') ? [] : ['Team Name'];
+		for (let i = 1; i <= 6; i++) {
+			if (['email', 'discord', 'name'].some(key => normalized.includes(`${key}p${i}`))) {
+				for (const key of ['email', 'name']) if (!normalized.includes(`${key}p${i}`)) missingCols.push(`${key}_p${i}`);
+			}
+		}
 	} else {
-		hidePreviewWarning();
+		const expected = currentCSVImportType === 'participants' ? ['email', 'name', 'team'] : ['matchid', 'scheduledtime'];
+		missingCols = expected.filter(col => !normalized.some(h => h === col || (col === 'team' && h === 'teamname')));
 	}
+	if (missingCols.length) showPreviewWarning(`Missing required columns: ${missingCols.join(', ')}`);
+	else hidePreviewWarning();
 
 	// Render preview
 	renderCSVPreview(headers);
@@ -1376,29 +1551,35 @@ function parseAndPreviewCSV() {
 	if (currentCSVImportType === 'participants') {
 		document.getElementById('csv-options-section').style.display = 'block';
 	}
-	document.getElementById('csv-import-btn').disabled = false;
+	document.getElementById('csv-import-btn').disabled = missingCols.length > 0;
 }
 
-function parseCSVRow(row) {
-	const result = [];
-	let current = '';
-	let inQuotes = false;
-
-	for (let i = 0; i < row.length; i++) {
-		const char = row[i];
-
-		if (char === '"') {
-			inQuotes = !inQuotes;
-		} else if (char === ',' && !inQuotes) {
-			result.push(current.trim());
-			current = '';
-		} else {
-			current += char;
-		}
+function parseParticipantTable(text) {
+	text = text.replace(/^\uFEFF/, "");
+	const firstLine = text.split(/\r?\n/, 1)[0];
+	const delimiter = firstLine.includes("\t") ? "\t" : ",";
+	const rows = [];
+	let row = [], cell = "", quoted = false;
+	const finishRow = () => {
+		row.push(cell.trim());
+		if (row.some(value => value !== "")) rows.push(row);
+		row = []; cell = "";
+	};
+	for (let i = 0; i < text.length; i++) {
+		const ch = text[i];
+		if (ch === '"') {
+			if (quoted && text[i + 1] === '"') { cell += '"'; i++; }
+			else quoted = !quoted;
+		} else if (ch === delimiter && !quoted) {
+			row.push(cell.trim()); cell = "";
+		} else if ((ch === "\n" || ch === "\r") && !quoted) {
+			if (ch === "\r" && text[i + 1] === "\n") i++;
+			finishRow();
+		} else cell += ch;
 	}
-	result.push(current.trim());
-
-	return result;
+	if (quoted) throw new Error("Unclosed quoted cell in participant import");
+	finishRow();
+	return rows;
 }
 
 function renderCSVPreview(headers) {
@@ -1681,6 +1862,7 @@ renderParticipants = function(participants) {
 			</td>
 		</tr>
 	`).join('');
+	renderVerifiedTeams();
 };
 
 const originalRenderSchedules = renderSchedules;

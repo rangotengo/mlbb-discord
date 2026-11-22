@@ -23,6 +23,10 @@ export class ChallongeTournament extends BaseEntity {
 	@Column()
 	name!: string;
 
+	/// Optional dashboard name, preserved when syncing from Challonge.
+	@Column({ nullable: true })
+	displayNameOverride?: string;
+
 	/// User-provided description of arbitrary length.
 	@Column("text")
 	description!: string;
@@ -70,6 +74,9 @@ export class ChallongeTournament extends BaseEntity {
 	/// Used to determine which match threads newly verified users should be added to.
 	@Column({ nullable: true })
 	activeRound?: number;
+
+	@Column({ default: "1566425054168744057", length: 20 })
+	checkInChannelId!: string;
 
 	/// When true, all check-in and verification commands (!check-in, !email, !verify) are blocked.
 	@Column({ default: false })

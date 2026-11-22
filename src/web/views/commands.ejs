@@ -1,0 +1,58 @@
+<div class="commands-page page-wide">
+	<div class="page-header">
+		<div>
+			<h2 class="page-title">Commands</h2>
+			<p class="page-subtitle">Discord commands, their usage, and what they do.</p>
+		</div>
+	</div>
+	<div class="commands-notes">
+		<p>Run commands in channels or threads under category <code><%= categoryId %></code>. Joining the server does not start verification.</p>
+		<p><code>&lt;argument&gt;</code> is required; <code>[argument]</code> is optional. Where supported, omit the tournament ID when the server has only one tournament. Attach files directly to the Discord command message.</p>
+		<p>Slash commands use Discord's named option fields. Availability also depends on Discord command permissions and registration.</p>
+	</div>
+	<div class="filters">
+		<label class="sr-only" for="command-search">Search commands</label>
+		<input class="search-input" id="command-search" type="search" placeholder="Search commands or descriptions…">
+		<label for="command-type">Show</label>
+		<select class="form-input commands-type" id="command-type">
+			<option value="all">All commands</option>
+			<option value="Message">Message commands</option>
+			<option value="Slash">Slash commands</option>
+		</select>
+	</div>
+	<p class="page-subtitle" id="command-count" aria-live="polite"><%= commands.length %> commands</p>
+	<div class="commands-grid">
+		<% commands.forEach(command => { %>
+		<article class="command-card" data-type="<%= command.type %>">
+			<div class="command-card-heading"><h3><code><%= command.name %></code></h3><span class="badge"><%= command.type %></span></div>
+			<p><%= command.description %></p>
+			<code class="command-usage"><%= command.usage %></code>
+			<% if (command.options.length) { %>
+			<dl class="command-options">
+				<% command.options.forEach(option => { %>
+				<dt><code><%= option.name %></code> · <%= option.required ? 'Required' : 'Optional' %></dt>
+				<dd><%= option.description %></dd>
+				<% }); %>
+			</dl>
+			<% } %>
+		</article>
+		<% }); %>
+	</div>
+	<p class="empty-state" id="command-empty" hidden>No commands match your search.</p>
+</div>
+<%- contentFor('script') %>
+<script>
+function filterCommands() {
+	const query = document.getElementById('command-search').value.trim().toLowerCase();
+	const type = document.getElementById('command-type').value;
+	let count = 0;
+	document.querySelectorAll('.command-card').forEach(card => {
+		card.hidden = (type !== 'all' && card.dataset.type !== type) || !card.textContent.toLowerCase().includes(query);
+		if (!card.hidden) count++;
+	});
+	document.getElementById('command-count').textContent = `${count} command${count === 1 ? '' : 's'}`;
+	document.getElementById('command-empty').hidden = count > 0;
+}
+document.getElementById('command-search').addEventListener('input', filterCommands);
+document.getElementById('command-type').addEventListener('change', filterCommands);
+</script>
